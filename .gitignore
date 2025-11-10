@@ -177,3 +177,6 @@ cython_debug/
 # tests
 tests/data_input_local/
 tests/data_output/
+
+
+ref/
