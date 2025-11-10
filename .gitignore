@@ -172,3 +172,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# auto spider projects
+# tests
+tests/data_input_local/
+tests/data_output/
