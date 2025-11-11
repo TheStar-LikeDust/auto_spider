@@ -16,6 +16,20 @@
 - 基于LLM的策略链
 
 
+## 快速开始
+
+```python
+from auto_spider.components import RequestSpider
+
+spider = RequestSpider()
+spider.attach()
+
+response = spider.do_url('https://example.com', retry=3)
+html = response.text
+
+spider.detach()
+```
+
 ## 爬虫组件库
 
 提供基本的爬虫组件库，可以让大模型辅助构建基本的爬虫程序

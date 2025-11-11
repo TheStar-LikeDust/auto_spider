@@ -1,0 +1,8 @@
+# Core dependencies
+requests>=2.31.0
+
+# Browser automation
+playwright>=1.40.0
+
+# Optional dependencies for environment configuration
+python-dotenv>=1.0.0

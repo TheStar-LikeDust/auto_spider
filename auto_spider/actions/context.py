@@ -12,7 +12,7 @@ class Context(dict):
     Action pipeline context with system resources as attributes.
     
     System resources (fixed attributes):
-        - scraper: Browser scraper component
+        - spider: Spider component for web access
         - db: Database connection
         - config: Configuration object
         - cache: Cache component
@@ -22,10 +22,10 @@ class Context(dict):
         - context['url'], context['prev_result'], etc.
     
     Example:
-        context = Context(scraper=my_scraper, url='https://example.com')
+        context = Context(spider=my_spider, url='https://example.com')
         
         # attribute access (with IDE hints)
-        content = context.scraper.get(context['url'])
+        content = context.spider.get(context['url'])
         
         # dict access (flexible)
         context['data'] = 'value'
@@ -34,7 +34,7 @@ class Context(dict):
     
     def __init__(
         self,
-        scraper: Optional[Any] = None,
+        spider: Optional[Any] = None,
         db: Optional[Any] = None,
         config: Optional[Any] = None,
         cache: Optional[Any] = None,
@@ -44,22 +44,22 @@ class Context(dict):
         Initialize context with system resources and business data.
         
         Args:
-            scraper: Browser scraper component
+            spider: Spider component for web access
             db: Database connection
             config: Configuration object
             cache: Cache component
             **kwargs: Business data as dict items
         """
         super().__init__(**kwargs)
-        self.scraper = scraper
+        self.spider = spider
         self.db = db
         self.config = config
         self.cache = cache
     
     def __repr__(self):
         resources = []
-        if self.scraper:
-            resources.append(f"scraper={type(self.scraper).__name__}")
+        if self.spider:
+            resources.append(f"spider={type(self.spider).__name__}")
         if self.db:
             resources.append(f"db={type(self.db).__name__}")
         if self.config:
