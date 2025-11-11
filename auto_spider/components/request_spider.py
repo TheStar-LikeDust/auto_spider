@@ -7,7 +7,7 @@ Simple HTTP spider using requests library.
 from typing import Dict, Optional, Union
 from requests import Session, Response
 
-from auto_spider.components.base_spider import Spider
+from .base_spider import Spider
 
 
 DEFAULT_HEADERS = {

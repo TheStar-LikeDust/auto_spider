@@ -7,7 +7,7 @@ Modern browser automation using Playwright.
 from typing import Optional, Dict, Any
 from playwright.sync_api import sync_playwright, Browser, Page, Playwright
 
-from auto_spider.components.base_spider import Spider
+from .base_spider import Spider
 
 
 class PlaywrightSpider(Spider):

@@ -13,28 +13,31 @@ class Context(dict):
     
     System resources (fixed attributes):
         - spider: Spider component for web access
+        - task: Task data dict for current scraping task
         - db: Database connection
         - config: Configuration object
         - cache: Cache component
     
-    Business data (dict access):
-        - Use dict methods for flexible business data
-        - context['url'], context['prev_result'], etc.
+    Dict fields are for business data.
     
     Example:
-        context = Context(spider=my_spider, url='https://example.com')
+        task = {'name': 'fetch_baidu', 'url': 'https://baidu.com'}
+        initial = {'db': db, 'cache': cache}
+        context = Context(spider=my_spider, task=task, initial=initial)
         
         # attribute access (with IDE hints)
-        content = context.spider.get(context['url'])
+        url = context.task['url']
+        content = context.spider.do_url(url)
         
         # dict access (flexible)
-        context['data'] = 'value'
-        prev = context.get('prev_result')
+        context['html'] = content
     """
     
     def __init__(
         self,
         spider: Optional[Any] = None,
+        task: Optional[dict] = None,
+        initial: Optional[Any] = None,
         db: Optional[Any] = None,
         config: Optional[Any] = None,
         cache: Optional[Any] = None,
@@ -44,22 +47,48 @@ class Context(dict):
         Initialize context with system resources and business data.
         
         Args:
-            spider: Spider component for web access
-            db: Database connection
-            config: Configuration object
-            cache: Cache component
-            **kwargs: Business data as dict items
+            spider: Spider instance
+            task: Task dict
+            initial: Initial resources object from initial_plan
+            db: Database instance (deprecated)
+            config: Config instance (deprecated)
+            cache: Cache instance (deprecated)
+            **kwargs: Business data
         """
         super().__init__(**kwargs)
         self.spider = spider
+        self.task = task or {}
+        self.initial = initial
         self.db = db
         self.config = config
         self.cache = cache
+    
+    def save_result(self, result: Any = None):
+        """
+        Save result to output directory.
+        
+        Args:
+            result: Result to save (default: context['result'])
+            
+        Example:
+            context['result'] = {'title': 'Example'}
+            context.save_result()  # saves to output/task_name.json
+        """
+        if not self.initial or 'save_result' not in self.initial:
+            raise RuntimeError("save_result not available in context.initial")
+        
+        if result is None:
+            result = self.get('result')
+        
+        task_name = self.task.get('name', 'unnamed')
+        self.initial['save_result'](task_name, result)
     
     def __repr__(self):
         resources = []
         if self.spider:
             resources.append(f"spider={type(self.spider).__name__}")
+        if self.task:
+            resources.append(f"task={self.task.get('name', 'unnamed')}")
         if self.db:
             resources.append(f"db={type(self.db).__name__}")
         if self.config:

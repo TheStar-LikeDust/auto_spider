@@ -1,7 +1,7 @@
 """
-Action loader tools.
+Dynamic loader for actions and plans.
 
-Scan directories and load all @active actions.
+Scan directories and load all @action, @parse, @extract functions.
 """
 
 import os
@@ -9,7 +9,6 @@ import sys
 import importlib.util
 from pathlib import Path
 from typing import List
-from auto_spider.core import register_action
 
 
 def load_actions_from_file(filepath: str):
@@ -38,7 +37,7 @@ def load_actions_from_file(filepath: str):
     except Exception:
         return
     
-    # scan for @active functions (already auto-registered by decorator)
+    # scan for @action/@parse/@extract functions (already auto-registered by decorator)
     # nothing to do here, decorator handles registration
 
 

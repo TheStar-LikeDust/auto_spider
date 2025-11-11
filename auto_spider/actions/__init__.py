@@ -1,13 +1,11 @@
 """
 Actions module for auto_spider.
 
-Simple function-based action system.
+Context data structure for action pipeline.
 """
 
-from auto_spider.actions.context import Context
-from auto_spider.actions._base_action import execute_pipeline
+from .context import Context
 
 __all__ = [
     'Context',
-    'execute_pipeline',
 ]

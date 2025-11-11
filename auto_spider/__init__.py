@@ -2,23 +2,26 @@
 auto_spider - Web scraping automation framework.
 
 Workflow:
-1. Create @active() actions in files
-2. Load: tools.load_actions_from_directory()
-3. Execute: core.execute_plan()
+1. Create @action(), @parse(), @extract() functions in files
+2. Load: core.load_actions_from_directory() (optional)
+3. Execute: core.run_plan() with stage-specific parameters
 """
 
 # for developing actions
-from auto_spider.actions import Context
-from auto_spider.core import active, set_active
+from .actions import Context
+from .core import active, action, parse, extract, set_active
 
-# for loading and execution
-from auto_spider import tools, core, plan
+# for runtime execution
+from . import core, tools, components
 
 __all__ = [
     'Context',
-    'active', 
+    'active',
+    'action',
+    'parse',
+    'extract',
     'set_active',
-    'tools',
     'core',
-    'plan',
+    'tools',
+    'components',
 ]

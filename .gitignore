@@ -180,3 +180,6 @@ tests/data_output/
 
 
 ref/
+
+# Project documentation
+claude.md

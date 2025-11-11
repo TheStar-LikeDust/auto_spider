@@ -1,44 +1,24 @@
 """
-Base action module for auto_spider.
+DEPRECATED: Action execution moved to core module.
 
-Simple function-based action system.
+This file kept for backward compatibility only.
+Use core._execute_actions or core.execute_plan instead.
 """
 
-from typing import Any, Union, Dict, List, Callable
-from auto_spider.actions.context import Context
+import warnings
 
 
-def execute_pipeline(
-    actions: Union[Callable, List[Callable]],
-    context: Union[Context, Dict[str, Any]] = None,
-    **kwargs
-) -> Any:
+def execute_pipeline(*args, **kwargs):
     """
-    Execute action pipeline.
+    DEPRECATED: Use core._execute_actions instead.
     
-    Args:
-        actions: Single action or list of actions
-        context: Context object or dict
-        **kwargs: Context initialization args
-        
-    Returns:
-        Final result
+    This function is deprecated and will be removed in future versions.
     """
-    # convert to list
-    if not isinstance(actions, list):
-        actions = [actions]
+    warnings.warn(
+        "execute_pipeline is deprecated, use core._execute_actions instead",
+        DeprecationWarning,
+        stacklevel=2
+    )
     
-    # create context
-    if context is None:
-        context = Context(**kwargs)
-    elif isinstance(context, dict) and not isinstance(context, Context):
-        context = Context(**context)
-    
-    # execute actions sequentially
-    result = None
-    for action in actions:
-        result = action(context)
-        context['prev_result'] = result
-        context.setdefault('results', []).append(result)
-    
-    return result
+    from ..core import _execute_actions
+    return _execute_actions(*args, **kwargs)
