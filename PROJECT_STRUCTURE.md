@@ -9,15 +9,27 @@ auto_spider/
 │   ├── context.py          # Context - 所有step共用的上下文对象
 │   ├── task.py             # Task - action step的输入数据结构
 │   ├── task_result.py      # TaskResult - parse step的输入数据结构
-│   └── task_data.py        # TaskData - extract step的输入数据结构
+│   ├── task_data.py        # TaskData - extract step的输入数据结构
+│   └── runner.py           # Step执行器 - 执行step函数序列
 │
 ├── core/                    # 核心逻辑 - Step的注册、执行、调度
 │   ├── __init__.py         # 导出核心API
 │   ├── registry.py         # Step注册器 - 装饰器和注册管理
-│   ├── executor.py         # Step执行器 - 统一的执行逻辑
 │   ├── scheduler.py        # Step调度器 - 多进程/线程调度
-│   ├── loader.py           # Step加载器 - 动态加载step函数
-│   └── storage.py          # 存储管理 - 输出目录和文件管理
+│   ├── stage.py            # Stage管理器 - 阶段任务和结果管理
+│   ├── worker.py           # Worker执行器 - 单个worker执行逻辑
+│   ├── dispatcher.py       # Task分发器 - MPQueue任务分发
+│   ├── storage.py          # 存储管理 - 输出目录和文件管理
+│   │
+│   ├── plan_template/      # Plan模板生成包
+│   │   ├── __init__.py     # 导出 generate_plan, generate_steps
+│   │   ├── templates.py    # 模板字符串常量
+│   │   └── generator.py    # 模板生成逻辑
+│   │
+│   └── plan_cli/           # Plan CLI命令包
+│       ├── __init__.py     # 导出 cmd_generate, cmd_run, main
+│       ├── commands.py     # 命令业务逻辑
+│       └── main.py         # argparse参数解析
 │
 ├── components/              # 组件库 - 可复用的功能组件
 │   ├── __init__.py         # 延迟导入入口，避免依赖错误
@@ -27,12 +39,14 @@ auto_spider/
 │       ├── request_spider.py   # RequestSpider - 基于requests的HTTP爬虫
 │       └── playwright_spider.py # PlaywrightSpider - 基于Playwright的浏览器爬虫
 │
-├── tools/                   # 工具集 - 辅助开发工具
-│   ├── __init__.py         # 导出工具函数
-│   └── templates.py        # 代码模板生成器
+├── tools/                   # 工具集（向后兼容）
+│   ├── __init__.py         # 重定向到 plan_template
+│   ├── templates.py        # 保留但建议废弃
+│   └── template_strings.py # 保留但建议废弃
 │
 ├── __init__.py             # 包入口 - 导出公共API
-├── cli.py                  # CLI命令行工具（统一入口）
+├── __main__.py             # CLI入口 - python -m auto_spider
+├── cli.py                  # 向后兼容（已废弃）
 ├── logger.py               # 日志系统
 └── settings.py             # 全局配置
 ```
@@ -87,21 +101,13 @@ Step的生命周期管理，从注册到执行的完整流程。
 - **作用**: 管理step函数的注册和获取
 - **功能**:
   - 装饰器: `@action()`, `@parse()`, `@extract()`, `@active()`
-  - 注册函数: `register_action()`, `register_parse()`, `register_extract()`
-  - 获取函数: `get_action()`, `get_parse()`, `get_extract()`
-  - 清理函数: `clear_actions()`, `clear_parses()`, `clear_extracts()`
-  - 执行接口: `execute_plan()`, `execute_parse()`, `execute_extract()`
+  - 统一注册: `register_step()`, `step()` - 统一装饰器
+  - 获取函数: `get_step()`, `get_all_steps()`, `get_all_actions()`, `get_all_parses()`, `get_all_extracts()`
 - **全局注册表**: `_ACTION_REGISTRY`, `_PARSE_REGISTRY`, `_EXTRACT_REGISTRY`
-
-#### `executor.py` - Step执行器
-- **作用**: 统一的step函数执行逻辑
-- **功能**:
-  - `execute_functions()` - 顺序执行多个函数
-  - `execute_plan()` - 通用的执行计划接口
-- **特点**: 
-  - 自动创建和管理Context
-  - 记录执行结果到context['results']
-  - 详细的日志输出
+- **特点**:
+  - 装饰器自动注册函数
+  - 支持优先级设置
+  - 向后兼容: `@active()` 等同于 `@action()`
 
 #### `scheduler.py` - Step调度器
 - **作用**: 多进程/线程任务调度
@@ -116,15 +122,34 @@ Step的生命周期管理，从注册到执行的完整流程。
   - extract阶段: 多线程 + 自动加载parse输出
   - 自动结果保存和日志记录
 
-#### `loader.py` - Step加载器
-- **作用**: 动态加载Python文件中的step函数
+#### `stage.py` - Stage管理器
+- **作用**: 管理各阶段的任务获取和结果保存
 - **功能**:
-  - `load_actions_from_file()` - 加载单个文件
-  - `load_actions_from_directory()` - 扫描目录加载
+  - `get_tasks_for_stage()` - 获取指定阶段的任务列表
+  - `save_stage_result()` - 保存阶段执行结果
 - **特点**: 
-  - 自动导入并执行装饰器注册
-  - 支持递归扫描
-  - 跳过非Python文件
+  - action阶段: 调用initial_task()获取任务
+  - parse阶段: 自动加载action输出
+  - extract阶段: 自动加载action和parse输出
+
+#### `worker.py` - Worker执行器
+- **作用**: 单个worker的执行逻辑
+- **功能**:
+  - `start_workers()` - 启动多个worker
+  - `run_worker()` - 单个worker运行逻辑
+- **特点**:
+  - action阶段使用多进程
+  - parse/extract阶段使用多线程
+  - 支持barrier同步机制
+
+#### `dispatcher.py` - Task分发器
+- **作用**: 基于MPQueue的任务分发
+- **功能**:
+  - `dispatch_tasks()` - 分发任务到workers
+- **特点**:
+  - 支持process和thread两种模式
+  - 使用Barrier实现worker同步
+  - 主进程倒计时启动
 
 #### `storage.py` - 存储管理
 - **作用**: 管理输出目录和文件的读写
@@ -188,38 +213,83 @@ Step的生命周期管理，从注册到执行的完整流程。
 
 ---
 
-### 4. tools/ - 工具集
+### 4. core/plan_template/ - Plan模板生成
 
-辅助开发的工具函数。
+Plan和Step模板文件生成。
 
-#### `templates.py` - 代码模板生成器
-- **作用**: 生成标准化的代码模板
+#### `templates.py` - 模板字符串
+- **作用**: 存储所有模板字符串常量
 - **模板类型**:
-  - `ACTION_MODULE_TEMPLATE` - actions.py模板
-  - `PLAN_TEMPLATE` - plan文件模板
+  - `STEP_INIT_TEMPLATE` - steps包的__init__.py
+  - `ACTION_MODULE_TEMPLATE` - action.py模板
+  - `PARSE_MODULE_TEMPLATE` - parse.py模板
+  - `EXTRACT_MODULE_TEMPLATE` - extract.py模板
+  - `PLAN_TEMPLATE` - plan文件模板（带独立steps包）
   - `PLAN_SINGLE_FILE_TEMPLATE` - 单文件plan模板
+
+#### `generator.py` - 模板生成器
+- **作用**: 根据模板生成实际文件
 - **函数**:
-  - `generate_plan()` - 生成plan文件
-  - `generate_actions()` - 生成actions包
+  - `generate_steps(name, description)` - 生成steps包（包含action/parse/extract三个模块）
+  - `generate_plan(name, description, single_file)` - 生成plan文件
+- **生成结构**:
+  ```
+  steps_{name}/
+    __init__.py
+    action.py      # Action步骤
+    parse.py       # Parse步骤
+    extract.py     # Extract步骤
+  ```
 
 ---
 
-### 5. 顶层模块
+### 5. core/plan_cli/ - Plan CLI命令
 
-#### `cli.py` - CLI命令行工具
-- **作用**: 统一的命令行接口
+命令行工具实现。
+
+#### `commands.py` - 命令业务逻辑
+- **作用**: 实现CLI命令的核心逻辑
+- **函数**:
+  - `cmd_generate(name, description, single_file)` - 生成模板命令
+  - `cmd_run(plan_file, steps, stage, workers)` - 运行plan命令
+- **特点**: 纯业务逻辑，不依赖argparse
+
+#### `main.py` - CLI参数解析
+- **作用**: argparse参数解析和命令分发
 - **命令**:
-  - `generate` (别名: gen, g) - 生成plan和actions模板
+  - `generate` (别名: gen, g) - 生成plan和steps模板
   - `run` (别名: r) - 运行plan文件
 - **功能**:
   - 自动stage检测（从step名称推断action/parse/extract）
   - 友好的命令别名支持
   - 详细的帮助信息和示例
+
+---
+
+### 6. tools/ - 工具集（向后兼容）
+
+**注意**: 此模块已废弃，仅用于向后兼容。
+
+#### `__init__.py`
+- 重定向到 `core.plan_template`
+- 导出 `generate_plan`, `generate_steps`
+
+---
+
+### 7. 顶层模块
+
+#### `__main__.py` - CLI入口
+- **作用**: 主CLI入口，支持 `python -m auto_spider`
+- **实现**: 调用 `core.plan_cli.main()`
 - **使用**: 
   ```bash
-  python -m auto_spider.cli generate myplan
-  python -m auto_spider.cli run plan_myplan.py fetch_page -s action -w 8
+  python -m auto_spider generate myplan
+  python -m auto_spider run plan_myplan.py fetch_page -s action -w 8
   ```
+
+#### `cli.py` - 向后兼容（已废弃）
+- **状态**: 已废弃，建议使用 `python -m auto_spider`
+- **作用**: 向后兼容旧的 `python -m auto_spider.cli` 命令
 
 #### `__init__.py` - 包入口
 - **作用**: 导出公共API，提供统一的import接口
@@ -269,16 +339,16 @@ Task → action step → 原始数据(.html)
    scheduler.py 创建输出目录
 
 4. 分配任务到worker
-   多进程(action) / 多线程(parse/extract)
+   dispatcher.py 分发任务到多进程/多线程
 
-5. 执行step函数
-   executor.py 顺序执行
+5. Worker执行step函数
+   worker.py 执行step并保存结果
 
 6. 自动保存结果
-   storage.py 保存到输出目录
+   stage.py + storage.py 保存到输出目录
 
 7. 下一阶段自动加载
-   scheduler.py 加载上一阶段输出
+   stage.py 加载上一阶段输出
 ```
 
 ---

@@ -5,33 +5,33 @@ Provides action registry, scheduler, storage, and loader.
 """
 
 from .registry import (
-    active,
+    step,
     action,
+    active,
     parse,
     extract,
-    set_active,
-    register_action,
-    register_parse,
-    register_extract,
-    get_action,
-    get_parse,
-    get_extract,
+    register_step,
+    get_step,
+    get_all_steps,
     get_all_actions,
     get_all_parses,
     get_all_extracts,
-    clear_actions,
-    clear_parses,
-    clear_extracts,
-    execute_plan,
-    execute_parse,
-    execute_extract,
 )
 
-from ..step import Task, generate_task_name
+from ..step import Task, generate_task_name, execute_steps
 from .scheduler import (
     run_plan,
     run_plan_from_file,
     DEFAULT_MAX_WORKERS,
+)
+
+from .stage import (
+    get_tasks_for_stage,
+    save_stage_result,
+)
+
+from .worker import (
+    start_workers,
 )
 
 from .storage import (
@@ -39,59 +39,41 @@ from .storage import (
     save_task_result,
     find_latest_output_dir,
     load_task_result,
+    list_task_results,
 )
 
-from .loader import (
-    load_actions_from_file,
-    load_actions_from_directory,
-    load_actions_from_directories,
-    auto_load_actions,
-)
 
 __all__ = [
     # registry - decorators
-    'active',
+    'step',
     'action',
+    'active',
     'parse',
     'extract',
-    'set_active',
     
-    # registry - action
-    'register_action',
-    'get_action',
+    # registry - unified API
+    'register_step',
+    'get_step',
+    'get_all_steps',
     'get_all_actions',
-    'clear_actions',
-    'execute_plan',
-    
-    # registry - parse
-    'register_parse',
-    'get_parse',
     'get_all_parses',
-    'clear_parses',
-    'execute_parse',
-    
-    # registry - extract
-    'register_extract',
-    'get_extract',
     'get_all_extracts',
-    'clear_extracts',
-    'execute_extract',
+    'execute_steps',
     
-    # scheduler
+    # step
     'Task',
     'run_plan',
     'run_plan_from_file',
+    'get_tasks_for_stage',
+    'save_stage_result',
     'DEFAULT_MAX_WORKERS',
+    'start_workers',
     
     # storage
     'create_output_dir',
     'save_task_result',
     'find_latest_output_dir',
     'load_task_result',
+    'list_task_results',
     
-    # loader
-    'load_actions_from_file',
-    'load_actions_from_directory',
-    'load_actions_from_directories',
-    'auto_load_actions',
 ]

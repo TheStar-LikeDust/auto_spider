@@ -62,42 +62,65 @@ class Context(dict):
         self.db = db
         self.config = config
         self.cache = cache
+        
+        # internal step results storage
+        self._step_results = {}  # {step_name: result}
+        self._step_history = []  # [result1, result2, ...]
     
-    def save_result(self, result: Any = None):
+    def save_step_result(self, step_name: str, result: Any):
         """
-        Save result to output directory.
+        Save step result for later access.
         
         Args:
-            result: Result to save (default: context['result'])
-            
-        Example:
-            context['result'] = {'title': 'Example'}
-            context.save_result()  # saves to output/task_name.json
+            step_name: Step function name
+            result: Step result
         """
-        if not self.initial or 'save_result' not in self.initial:
-            raise RuntimeError("save_result not available in context.initial")
+        self._step_results[step_name] = result
+        self._step_history.append(result)
+    
+    def __getitem__(self, key):
+        """
+        Get item from context.
         
-        if result is None:
-            result = self.get('result')
+        Supports:
+        - context['data']: normal dict access
+        - context['step_name']: access step result by name (priority over dict)
+        - context[-1]: access last step result
+        - context[0]: access first step result
         
-        task_name = self.task.get('name', 'unnamed')
-        self.initial['save_result'](task_name, result)
+        Note: Integer keys are reserved for step history access.
+        
+        Args:
+            key: Dict key (str) or step index (int)
+            
+        Returns:
+            Value from dict or step result
+        """
+        if isinstance(key, int):
+            # integer index: access step history
+            if -len(self._step_history) <= key < len(self._step_history):
+                return self._step_history[key]
+            raise IndexError(f"Step index out of range: {key}")
+        elif isinstance(key, str) and key in self._step_results:
+            # string key: check step results first
+            return self._step_results[key]
+        else:
+            # normal dict access (string key only)
+            return super().__getitem__(key)
+    
+    def __contains__(self, key):
+        """
+        Check if key exists in context or step results.
+        
+        Args:
+            key: Dict key or step name
+            
+        Returns:
+            True if key exists
+        """
+        if isinstance(key, str) and key in self._step_results:
+            return True
+        return super().__contains__(key)
     
     def __repr__(self):
-        resources = []
-        if self.spider:
-            resources.append(f"spider={type(self.spider).__name__}")
-        if self.task:
-            task_name = self.task.get('name') or self.task.get('url', 'task')
-            if isinstance(task_name, str) and len(task_name) > 20:
-                task_name = task_name[:20] + '...'
-            resources.append(f"task={task_name}")
-        if self.db:
-            resources.append(f"db={type(self.db).__name__}")
-        if self.config:
-            resources.append(f"config={type(self.config).__name__}")
-        if self.cache:
-            resources.append(f"cache={type(self.cache).__name__}")
-        
-        dict_items = dict(self)
-        return f"Context({', '.join(resources)}, data={dict_items})"
+        return f"Context(steps={len(self._step_history)}, data_keys={list(self.keys())})"

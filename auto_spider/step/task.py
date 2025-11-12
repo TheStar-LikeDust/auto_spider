@@ -57,7 +57,7 @@ class Task(dict):
     Name field is optional and auto-generated if not provided.
     
     Example:
-        task = Task(url='https://baidu.com', retry=3)
+        task = Task(url='https://baidu.com')
         task['url']  # access
         task.get('retry', 1)  # dict method
     """

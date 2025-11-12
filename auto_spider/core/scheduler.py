@@ -1,471 +1,226 @@
 """
-Process and thread scheduler for tasks.
+Task scheduler for multi-worker execution.
 
-Multi-process task execution with resource reuse.
+Coordinate multiple workers for parallel task processing.
+
+Execution Flow:
+    - Validate parameters: Check initial_task and initial_plan
+        - Action stage requires initial_spider
+        - Parse/Extract stages do not need spider
+    
+    - Get tasks: Call initial_task() to get task list
+    
+    - Execute stages: Process each provided stage in order (actions → parses → extracts)
+        - Determine stage type and step names
+        - Create output directory for current stage
+        - Log stage start information
+        - Countdown 3 seconds
+        - Start workers (multiprocessing for action, threading for parse/extract)
+        - Worker handles execution and result loading
+
+Stage Requirements:
+    - Action: Creates tasks with spider, downloads data
+    - Parse: Reads action results to build TaskResult, parses HTML
+    - Extract: Reads action and parse results, saves to database
 """
 
-import json
+import time
+import importlib.util
+import sys
 from pathlib import Path
-from typing import Callable, List, Any
-from multiprocessing import Pool
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from ..step import Context, Task, generate_task_name
-from .registry import execute_plan as _execute_plan
-from .registry import execute_parse as _execute_parse
-from .registry import execute_extract as _execute_extract
-from .storage import create_output_dir, save_task_result, find_latest_output_dir, load_task_result
+from typing import Callable, List
+from .worker import start_workers
+from .storage import create_output_dir
+from .stage import get_tasks_for_stage
 from ..logger import build_logger
 
 _LOGGER = build_logger('scheduler')
 
-# default process pool size
 DEFAULT_MAX_WORKERS = 4
 
 
-# Task and generate_task_name moved to step package
-
-
-def _worker_process_tasks(args):
+def log_stage_start(stage: str, tasks: List, max_workers: int, step_names: List[str], output_path: Path):
     """
-    Worker function to process multiple tasks in one process.
-    
-    Reuses spider and initial resources across tasks.
+    Log stage start information with countdown.
     
     Args:
-        args: Tuple of (task_batch, actions, spider_factory, initial_plan_factory, output_dir)
-        
-    Returns:
-        List of result dicts
+        stage: Stage name
+        tasks: Task list
+        max_workers: Number of workers
+        step_names: Step names to execute
+        output_path: Output directory
     """
-    task_batch, actions, spider_factory, initial_plan_factory, output_dir = args
-    results = []
+    _LOGGER.info(f"Running {stage} stage: {len(tasks)} tasks, {max_workers} workers, {stage}s: {step_names}")
+    _LOGGER.info(f"Output directory: {output_path}")
+    _LOGGER.info("")
     
-    try:
-        # initialize spider (reused across tasks)
-        spider = spider_factory()
-        spider.attach()
-        
-        # initialize plan resources (reused across tasks)
-        initial = initial_plan_factory()
-        
-        # inject output_dir and save function
-        if not isinstance(initial, dict):
-            initial = {'resources': initial}
-        
-        initial['output_dir'] = output_dir
-        initial['save_result'] = lambda task_name, result, ext='html': save_task_result(output_dir, task_name, result, ext)
-        
-        _LOGGER.info(f"Worker processing {len(task_batch)} tasks")
-        _LOGGER.debug(f"Worker initialized - Spider: {type(spider).__name__}, Initial resources: {list(initial.keys())}")
-        
-        # process each task with new context
-        for i, task in enumerate(task_batch):
-            task_name = generate_task_name(task, i)
-            
-            try:
-                _LOGGER.info(f"Executing task: {task_name}")
-                _LOGGER.debug(f"Task details: {dict(task)}")
-                
-                # create new context for this task
-                context = Context(spider=spider, task=task, initial=initial)
-                _LOGGER.debug(f"Context created with keys: {list(context.keys())}")
-                
-                result = _execute_plan(actions, context=context)
-                _LOGGER.debug(f"Action execution completed, result type: {type(result)}")
-                
-                # auto save result (save context['result'] directly as html)
-                task_result = context.get('result')
-                if task_result is not None:
-                    save_task_result(output_dir, task_name, task_result, 'html')
-                    _LOGGER.info(f"Task result saved: {task_name}.html ({len(str(task_result))} chars)")
-                else:
-                    _LOGGER.warning(f"No result found in context['result'] for task: {task_name}")
-                
-                # save context data as json for debugging (exclude large content)
-                context_data = {k: v for k, v in context.items() if k not in ['spider', 'result']}  # exclude spider and result
-                save_task_result(output_dir, task_name, context_data, 'json')
-                _LOGGER.debug(f"Context data saved: {task_name}.json")
-                
-                results.append({
-                    'task_name': task_name,
-                    'success': True,
-                    'result': result
-                })
-                
-            except Exception as e:
-                _LOGGER.error(f"Task failed: {task_name}, error: {e}")
-                results.append({
-                    'task_name': task_name,
-                    'success': False,
-                    'error': str(e)
-                })
-        
-        # cleanup
-        spider.detach()
-        
-    except Exception as e:
-        _LOGGER.error(f"Worker failed: {e}")
-        # return failed results for all tasks in batch
-        for task in task_batch:
-            results.append({
-                'task_name': task.get('name', 'unnamed'),
-                'success': False,
-                'error': str(e)
-            })
-    
-    return results
-
-
-def _worker_thread_parse(args):
-    """
-    Worker function to process parse tasks in thread.
-    
-    Parse stage loads action results from files.
-    
-    Args:
-        args: Tuple of (task, parses, initial_plan_factory, output_dir)
-        
-    Returns:
-        Result dict
-    """
-    task, parses, initial_plan_factory, output_dir = args
-    task_name = generate_task_name(task)
-    
-    try:
-        # initialize plan resources
-        initial = initial_plan_factory()
-        
-        if not isinstance(initial, dict):
-            initial = {'resources': initial}
-        
-        initial['output_dir'] = output_dir
-        initial['save_result'] = lambda name, result, ext='html': save_task_result(output_dir, name, result, ext)
-        
-        # auto load latest action result
-        try:
-            # find latest action output directory for same plan
-            plan_name = output_dir.name.split('_parse_')[0]  # extract plan name from parse dir
-            latest_action_dir = find_latest_output_dir(plan_name, 'action')
-            _LOGGER.debug(f"Found latest action directory: {latest_action_dir}")
-            
-            # load action result
-            action_result = load_task_result(latest_action_dir, task_name, 'html')
-            if action_result is None:
-                action_result = ""
-                _LOGGER.warning(f"No action result file found for task: {task_name}")
-            else:
-                _LOGGER.debug(f"Loaded action result for {task_name}: {len(str(action_result))} chars")
-        except Exception as e:
-            _LOGGER.warning(f"Failed to load action result for {task_name}: {e}")
-            action_result = ""
-        
-        _LOGGER.info(f"Parsing task: {task_name}")
-        _LOGGER.debug(f"Loaded action result: {len(str(action_result))} chars")
-        
-        # create context with action result
-        context = Context(task=task, initial=initial)
-        context['result'] = action_result  # load action result as 'result'
-        _LOGGER.debug(f"Parse context created with keys: {list(context.keys())}")
-        
-        result = _execute_parse(parses, context=context)
-        _LOGGER.debug(f"Parse execution completed, result type: {type(result)}")
-        
-        # auto save parse result (save context['result'] directly as html by default)
-        parse_result = context.get('result')
-        if parse_result is not None:
-            # save result as html (default) - could be parsed HTML or other content
-            save_task_result(output_dir, task_name, parse_result, 'html')
-            _LOGGER.info(f"Parse result saved: {task_name}.html")
-        else:
-            _LOGGER.warning(f"No result found in context['result'] for parse task: {task_name}")
-        
-        # save context data as json for debugging (exclude large content)
-        context_data = {k: v for k, v in context.items() if k not in ['spider', 'result']}  # exclude spider and result
-        save_task_result(output_dir, task_name, context_data, 'json')
-        _LOGGER.debug(f"Parse context data saved: {task_name}.json")
-        
-        return {
-            'task_name': task_name,
-            'success': True,
-            'result': result
-        }
-        
-    except Exception as e:
-        _LOGGER.error(f"Parse task failed: {task_name}, error: {e}")
-        return {
-            'task_name': task_name,
-            'success': False,
-            'error': str(e)
-        }
-
-
-def _worker_thread_extract(args):
-    """
-    Worker function to process extract tasks in thread.
-    
-    Extract stage loads parse results from files.
-    
-    Args:
-        args: Tuple of (task, extracts, initial_plan_factory, output_dir)
-        
-    Returns:
-        Result dict
-    """
-    task, extracts, initial_plan_factory, output_dir = args
-    task_name = generate_task_name(task)
-    
-    try:
-        # initialize plan resources
-        initial = initial_plan_factory()
-        
-        if not isinstance(initial, dict):
-            initial = {'resources': initial}
-        
-        initial['output_dir'] = output_dir
-        initial['save_result'] = lambda name, result, ext='html': save_task_result(output_dir, name, result, ext)
-        
-        # auto load latest parse result
-        try:
-            # find latest parse output directory for same plan
-            plan_name = output_dir.name.split('_extract_')[0]  # extract plan name from extract dir
-            latest_parse_dir = find_latest_output_dir(plan_name, 'parse')
-            _LOGGER.debug(f"Found latest parse directory: {latest_parse_dir}")
-            
-            # load parse result
-            parse_result = load_task_result(latest_parse_dir, task_name, 'json')
-            if parse_result is None:
-                parse_result = {}
-                _LOGGER.warning(f"No parse result file found for task: {task_name}")
-            else:
-                _LOGGER.debug(f"Loaded parse result for {task_name}: {parse_result}")
-        except Exception as e:
-            _LOGGER.warning(f"Failed to load parse result for {task_name}: {e}")
-            parse_result = {}
-        
-        _LOGGER.info(f"Extracting task: {task_name}")
-        _LOGGER.debug(f"Loaded parse result: {parse_result}")
-        
-        # create context with parse result
-        context = Context(task=task, initial=initial)
-        context['result'] = parse_result  # load parse result as 'result'
-        _LOGGER.debug(f"Extract context created with keys: {list(context.keys())}")
-        
-        result = _execute_extract(extracts, context=context)
-        _LOGGER.debug(f"Extract execution completed, result type: {type(result)}")
-        
-        # auto save extract result (save context['result'] directly as html by default)
-        extract_result = context.get('result')
-        if extract_result is not None:
-            # save result as html (default) - could be extracted data or other content
-            save_task_result(output_dir, task_name, extract_result, 'html')
-            _LOGGER.info(f"Extract result saved: {task_name}.html")
-        else:
-            _LOGGER.warning(f"No result found in context['result'] for extract task: {task_name}")
-        
-        # save context data as json for debugging (exclude large content)
-        context_data = {k: v for k, v in context.items() if k not in ['spider', 'result']}  # exclude spider and result
-        save_task_result(output_dir, task_name, context_data, 'json')
-        _LOGGER.debug(f"Extract context data saved: {task_name}.json")
-        
-        return {
-            'task_name': task_name,
-            'success': True,
-            'result': result
-        }
-        
-    except Exception as e:
-        _LOGGER.error(f"Extract task failed: {task_name}, error: {e}")
-        return {
-            'task_name': task_name,
-            'success': False,
-            'error': str(e)
-        }
+    for i in range(2, 0, -1):
+        _LOGGER.info(f"Starting in {i}...")
+        time.sleep(1)
+    _LOGGER.info("Execution started!")
+    _LOGGER.info("")
 
 
 def run_plan(
-    initial_spider: Callable = None,
-    initial_task: Callable = None,
-    initial_plan: Callable = None,
-    actions: List[str] = None,
-    parses: List[str] = None,
-    extracts: List[str] = None,
-    max_workers: int = DEFAULT_MAX_WORKERS,
-    plan_name: str = None,
-    output_dir: str = None
+        initial_spider: Callable = None,
+        initial_task: Callable = None,
+        initial_plan: Callable = None,
+        actions: List[str] = None,
+        parses: List[str] = None,
+        extracts: List[str] = None,
+        max_workers: int = DEFAULT_MAX_WORKERS,
+        plan_name: str = None,
+        output_dir: str = None
 ):
     """
-    Run plan by executing tasks in different stages.
+    Run plan by executing tasks in stages.
     
-    Stages (mutually exclusive):
-    - Action stage: multiprocessing + spider (download)
-    - Parse stage: threading + file reading (parse HTML)
-    - Extract stage: threading + database (save data)
+    Entry point for all three workflows:
+    - Action: Crawl data with spider, creates tasks and downloads
+    - Parse: Parse HTML, reads action results to build TaskResult
+    - Extract: Save to database, reads both action and parse results
+    
+    Can execute single or multiple stages in sequence with unified management.
+    Each stage has slight differences handled by this function.
     
     Args:
-        initial_spider: Function that creates spider (required for action stage)
-        initial_task: Function that returns task list (required)
-        initial_plan: Function that returns initial resources object (required)
-        actions: List of action names (action stage)
-        parses: List of parse names (parse stage)
-        extracts: List of extract names (extract stage)
+        initial_spider: Spider factory (required for action, None for parse/extract)
+        initial_task: Task list factory (required)
+        initial_plan: Resources factory (required)
+        actions: Action step names (crawl data with spider)
+        parses: Parse step names (parse HTML from action results)
+        extracts: Extract step names (save data from action and parse results)
         max_workers: Worker pool size (default: 4)
-        plan_name: Plan name for output directory (default: None)
-        output_dir: Custom output directory path (default: None, auto-created)
+        plan_name: Plan name for output directory
+        output_dir: Custom output directory
         
     Example:
-        # Action stage
+        # Action only: crawl data
         run_plan(initial_spider, initial_task, initial_plan, 
-                 actions=['fetch_page'], plan_name='baidu')
+                 actions=['fetch_page'], plan_name='plan1')
         
-        # Parse stage
+        # Parse only: parse existing action results
         run_plan(initial_task=initial_task, initial_plan=initial_plan,
-                 parses=['parse_html'], plan_name='baidu')
+                 parses=['parse_html'], plan_name='plan1')
         
-        # Extract stage
-        run_plan(initial_task=initial_task, initial_plan=initial_plan,
-                 extracts=['save_to_db'], plan_name='baidu')
+        # Full pipeline: action → parse → extract
+        run_plan(initial_spider, initial_task, initial_plan,
+                 actions=['fetch_page'],
+                 parses=['parse_html'],
+                 extracts=['save_to_db'],
+                 plan_name='plan1')
     """
-    # check mutual exclusivity
-    stage_count = sum([bool(actions), bool(parses), bool(extracts)])
-    if stage_count == 0:
-        raise ValueError("Must specify one of: actions, parses, or extracts")
-    if stage_count > 1:
-        raise ValueError("Can only specify one stage at a time: actions, parses, or extracts")
-    
     if not initial_task or not initial_plan:
         raise ValueError("initial_task and initial_plan are required")
-    tasks = initial_task()
-    
-    if not tasks:
-        _LOGGER.warning("No tasks to execute")
-        return
-    
-    # create output directory with stage
-    if output_dir:
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-    else:
-        if actions:
-            stage = 'action'
-        elif parses:
-            stage = 'parse'
-        elif extracts:
-            stage = 'extract'
-        else:
-            stage = 'action'  # fallback
-        
-        output_path = create_output_dir(plan_name, stage)
-    
-    # execute different stages
+
+    # validate action stage requirements
+    if actions and not initial_spider:
+        raise ValueError("initial_spider is required for action stage")
+
+    # execute action stage
     if actions:
-        # Action stage: multiprocessing + spider
-        if not initial_spider:
-            raise ValueError("initial_spider is required for action stage")
-        
-        _LOGGER.info(f"Running action stage: {len(tasks)} tasks, {max_workers} workers, actions: {actions}")
-        _LOGGER.info(f"Output directory: {output_path}")
-        
-        # split tasks into batches for workers
-        batch_size = (len(tasks) + max_workers - 1) // max_workers
-        task_batches = [tasks[i:i + batch_size] for i in range(0, len(tasks), batch_size)]
-        
-        # prepare args for each worker
-        worker_args = [(batch, actions, initial_spider, initial_plan, output_path) for batch in task_batches]
-        
-        # execute with process pool
-        with Pool(processes=max_workers) as pool:
-            batch_results = pool.map(_worker_process_tasks, worker_args)
-        
-        # flatten results
-        for batch in batch_results:
-            for result in batch:
-                task_name = result.get('task_name')
-                success = result.get('success')
-                _LOGGER.info(f"Task {task_name}: {'SUCCESS' if success else 'FAILED'}")
-    
-    elif parses:
-        # Parse stage: threading + file reading
-        _LOGGER.info(f"Running parse stage: {len(tasks)} tasks, {max_workers} workers, parses: {parses}")
-        _LOGGER.info(f"Output directory: {output_path}")
-        
-        # prepare args for each task
-        worker_args = [(task, parses, initial_plan, output_path) for task in tasks]
-        
-        # execute with thread pool
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(_worker_thread_parse, worker_args))
-        
-        # log results
-        for result in results:
-            task_name = result.get('task_name')
-            success = result.get('success')
-            _LOGGER.info(f"Parse {task_name}: {'SUCCESS' if success else 'FAILED'}")
-    
-    elif extracts:
-        # Extract stage: threading + database
-        _LOGGER.info(f"Running extract stage: {len(tasks)} tasks, {max_workers} workers, extracts: {extracts}")
-        _LOGGER.info(f"Output directory: {output_path}")
-        
-        # prepare args for each task
-        worker_args = [(task, extracts, initial_plan, output_path) for task in tasks]
-        
-        # execute with thread pool
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(_worker_thread_extract, worker_args))
-        
-        # log results
-        for result in results:
-            task_name = result.get('task_name')
-            success = result.get('success')
-            _LOGGER.info(f"Extract {task_name}: {'SUCCESS' if success else 'FAILED'}")
+        tasks = get_tasks_for_stage('action', initial_task=initial_task)
+        output_path = Path(output_dir) if output_dir else create_output_dir(plan_name, 'action')
+        log_stage_start('action', tasks, max_workers, actions, output_path)
+        start_workers(tasks, actions, initial_spider, initial_plan, output_path, 'action', max_workers)
+
+    # execute parse stage
+    if parses:
+        tasks = get_tasks_for_stage('parse', plan_name=plan_name)
+        output_path = Path(output_dir) if output_dir else create_output_dir(plan_name, 'parse')
+        log_stage_start('parse', tasks, max_workers, parses, output_path)
+        start_workers(tasks, parses, None, initial_plan, output_path, 'parse', max_workers)
+
+    # execute extract stage
+    if extracts:
+        tasks = get_tasks_for_stage('extract', plan_name=plan_name)
+        output_path = Path(output_dir) if output_dir else create_output_dir(plan_name, 'extract')
+        log_stage_start('extract', tasks, max_workers, extracts, output_path)
+        start_workers(tasks, extracts, None, initial_plan, output_path, 'extract', max_workers)
+
+    # TODO: Worker status checking
 
 
-def run_plan_from_file(plan_file: str, actions: List[str], max_workers: int = DEFAULT_MAX_WORKERS):
+def run_plan_from_file(
+        plan_file: str,
+        stage: str = 'action',
+        step_names: List[str] = None,
+        max_workers: int = DEFAULT_MAX_WORKERS
+):
     """
-    Load and run plan from Python file.
+    Wrapper for run_plan that loads plan from template file.
     
-    Plan file must define 3 functions:
-    - initial_spider()
-    - initial_task()
-    - initial_plan()
+    Reads plan template and quickly starts execution.
+    
+    Plan file must define:
+    - initial_spider() (for action stage)
+    - initial_task() (required)
+    - initial_plan() (required)
+    - Optional: ACTION_LIST, PARSE_LIST, EXTRACT_LIST
     
     Args:
         plan_file: Path to plan Python file
-        actions: List of action names to execute
-        max_workers: Process pool size (default: 4)
+        stage: Stage to run ('action', 'parse', 'extract')
+        step_names: Step names to execute (auto-reads from module if None)
+        max_workers: Worker pool size (default: 4)
         
     Example:
-        run_plan_from_file('plan_example.py', 
-                          actions=['fetch_page', 'parse'], 
-                          max_workers=4)
+        # Action stage
+        run_plan_from_file('plan_example.py', stage='action', 
+                          step_names=['fetch_page'], max_workers=4)
+        
+        # Auto-read from ACTION_LIST in module
+        run_plan_from_file('plan_example.py', stage='action')
     """
-    import importlib.util
-    import sys
-    from pathlib import Path
-    
     plan_path = Path(plan_file).resolve()
-    
+
     if not plan_path.exists():
         raise FileNotFoundError(f"Plan file not found: {plan_file}")
-    
+
     # load module
     spec = importlib.util.spec_from_file_location("plan_module", plan_path)
     if not spec or not spec.loader:
         raise ImportError(f"Cannot load plan file: {plan_file}")
-    
+
     module = importlib.util.module_from_spec(spec)
     sys.modules["plan_module"] = module
     spec.loader.exec_module(module)
-    
+
     # get 3 fixed functions
     initial_spider = getattr(module, 'initial_spider', None)
     initial_task = getattr(module, 'initial_task', None)
     initial_plan = getattr(module, 'initial_plan', None)
-    
-    if not initial_spider or not initial_task or not initial_plan:
-        raise ValueError(
-            f"Plan file must define: initial_spider, initial_task, initial_plan"
-        )
-    
+
+    if not initial_task or not initial_plan:
+        raise ValueError("Plan file must define: initial_task, initial_plan")
+
+    if stage == 'action' and not initial_spider:
+        raise ValueError("Plan file must define initial_spider for action stage")
+
+    # get step names from module if not provided
+    if step_names is None:
+        if stage == 'action':
+            step_names = getattr(module, 'ACTION_LIST', [])
+        elif stage == 'parse':
+            step_names = getattr(module, 'PARSE_LIST', [])
+        else:
+            step_names = getattr(module, 'EXTRACT_LIST', [])
+
+    # prepare kwargs
+    kwargs = {
+        'initial_task': initial_task,
+        'initial_plan': initial_plan,
+        'max_workers': max_workers,
+        'plan_name': plan_path.stem
+    }
+
+    if stage == 'action':
+        kwargs['initial_spider'] = initial_spider
+        kwargs['actions'] = step_names
+    elif stage == 'parse':
+        kwargs['parses'] = step_names
+    else:
+        kwargs['extracts'] = step_names
+
     # run plan
-    run_plan(initial_spider, initial_task, initial_plan, actions=actions, max_workers=max_workers)
+    run_plan(**kwargs)

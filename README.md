@@ -3,11 +3,11 @@
 基于统一Step概念的网页爬虫自动化框架。
 
 **核心特性**：
-- 🎯 统一的Step抽象（action/parse/extract三阶段）
-- 🚀 多进程/线程自动调度
-- 💾 自动结果保存和加载
-- 🔌 第三方库按需导入，核心框架零依赖
-- 📦 模块化设计，易于扩展
+- 统一的Step抽象（action/parse/extract三阶段）
+- 多进程/线程自动调度
+- 自动结果保存和加载
+- 第三方库按需导入，核心框架零依赖
+- 模块化设计，易于扩展
 
 ## 安装
 
@@ -28,11 +28,25 @@ playwright install chromium
 ### 1. 生成项目模板
 
 ```bash
-# 生成plan和actions包
-python -m auto_spider.cli generate myplan
+# 生成plan和steps包（推荐）
+python -m auto_spider generate myplan
 
-# 或使用单文件模式
-python -m auto_spider.cli generate myplan --single-file
+# 或使用单文件模式（所有steps在plan文件内）
+python -m auto_spider generate myplan --single-file
+```
+
+生成后的目录结构：
+```
+# 包模式（推荐）
+plan_myplan.py         # Plan文件
+steps_myplan/          # Steps包
+  __init__.py
+  action.py            # Action阶段步骤
+  parse.py             # Parse阶段步骤
+  extract.py           # Extract阶段步骤
+
+# 单文件模式
+plan_myplan.py         # Plan文件（包含所有steps）
 ```
 
 ### 2. 三阶段执行示例
@@ -78,7 +92,9 @@ def initial_task():
     ]
 
 def initial_plan():
-    return {}  # 可以返回db等资源
+    return {
+        'task_delay': 2  # action阶段任务间延迟（秒），默认2秒
+    }  # 可以返回db等资源
 
 # 执行三个阶段
 if __name__ == '__main__':
@@ -93,6 +109,54 @@ if __name__ == '__main__':
     # Extract阶段（自动加载parse结果）
     run_plan(initial_task=initial_task, initial_plan=initial_plan,
              extracts=['save_to_db'], plan_name='demo')
+```
+
+### 3. 单文件执行三阶段
+
+生成的 plan 文件默认执行 action 阶段，你可以通过注释/取消注释来执行不同阶段：
+
+```python
+# plan_myplan.py 文件结构
+if __name__ == '__main__':
+    # 默认：执行 action 阶段
+    run_plan(initial_spider, initial_task, initial_plan, 
+             actions=ACTION_LIST, plan_name='myplan')
+    
+    # 取消注释执行 parse 阶段
+    # run_plan(initial_task=initial_task, initial_plan=initial_plan,
+    #          parses=PARSE_LIST, plan_name='myplan')
+    
+    # 取消注释执行 extract 阶段
+    # run_plan(initial_task=initial_task, initial_plan=initial_plan,
+    #          extracts=EXTRACT_LIST, plan_name='myplan')
+```
+
+**执行命令**：
+
+```bash
+# 1. 执行 action 阶段（下载数据）
+python plan_myplan.py
+
+# 2. 修改 plan_myplan.py：注释掉 action，取消注释 parse
+# 然后执行 parse 阶段（解析数据）
+python plan_myplan.py
+
+# 3. 修改 plan_myplan.py：注释掉 parse，取消注释 extract
+# 然后执行 extract 阶段（保存数据）
+python plan_myplan.py
+```
+
+**或者使用 CLI 工具直接指定阶段**：
+
+```bash
+# 执行 action 阶段
+python -m auto_spider run plan_myplan.py fetch_page -s action
+
+# 执行 parse 阶段
+python -m auto_spider run plan_myplan.py parse_data -s parse
+
+# 执行 extract 阶段
+python -m auto_spider run plan_myplan.py save_data -s extract
 ```
 
 ## 核心概念
@@ -117,6 +181,23 @@ context.initial   # 初始资源（db, cache等）
 context['result'] # 当前阶段结果
 context['key']    # 自定义数据
 ```
+
+### 执行配置
+
+`initial_plan()` 可返回配置字典：
+
+```python
+def initial_plan():
+    return {
+        'task_delay': 2,     # action阶段任务间延迟（秒），默认2秒
+        'db': db_instance,   # 自定义资源
+        'cache': cache,      # 自定义资源
+    }
+```
+
+**配置说明**：
+- `task_delay`: action阶段每个worker处理多个任务时的延迟时间（默认2秒）
+- parse和extract阶段使用线程池并发执行，无需延迟
 
 ### Task（任务定义）
 
@@ -146,32 +227,32 @@ content = spider.do_url('https://example.com')
 ### 生成模板
 
 ```bash
-# 生成plan和actions包（推荐）
-python -m auto_spider.cli generate myplan
+# 生成plan和steps包（推荐）
+python -m auto_spider generate myplan
 # 或简写
-python -m auto_spider.cli gen myplan
-python -m auto_spider.cli g myplan
+python -m auto_spider gen myplan
+python -m auto_spider g myplan
 
-# 单文件模式
-python -m auto_spider.cli generate myplan --single-file
+# 单文件模式（所有steps在plan文件内）
+python -m auto_spider generate myplan --single-file
 ```
 
 ### 运行Plan
 
 ```bash
 # 运行action阶段
-python -m auto_spider.cli run plan_myplan.py fetch_page --stage action
+python -m auto_spider run plan_myplan.py fetch_page --stage action
 
 # 运行parse阶段
-python -m auto_spider.cli run plan_myplan.py parse_html --stage parse
+python -m auto_spider run plan_myplan.py parse_data --stage parse
 
 # 运行extract阶段
-python -m auto_spider.cli run plan_myplan.py save_to_db --stage extract
+python -m auto_spider run plan_myplan.py save_data --stage extract
 
 # 指定worker数量
-python -m auto_spider.cli run plan_myplan.py fetch_page -w 8
+python -m auto_spider run plan_myplan.py fetch_page -w 8
 
-# 或直接运行plan文件
+# 或直接运行plan文件（默认执行action阶段）
 python plan_myplan.py
 ```
 
@@ -197,15 +278,18 @@ python plan_myplan.py
 ```
 output/
 ├── demo_action_20241112_100000/
-│   ├── example_com.html  # context['result']内容
-│   └── example_com.json  # context其他数据（调试用）
+│   ├── example_com.html  # context['content'] - 原始HTML内容
+│   └── example_com.json  # context['result'] - 元数据（url, status等）
 ├── demo_parse_20241112_100100/
-│   ├── example_com.html  # 解析结果
-│   └── example_com.json  # 元数据
+│   └── example_com.json  # context['data'] - 解析后的结构化数据
 └── demo_extract_20241112_100200/
-    ├── example_com.html  # 持久化确认
-    └── example_com.json  # 元数据
+    # extract阶段通常只保存到数据库，不生成文件
 ```
+
+**保存规则**：
+- **Action阶段**: `context['content']` → .html, `context['result']` → .json
+- **Parse阶段**: `context['data']` → .json
+- **Extract阶段**: 通常只保存到数据库，不生成文件
 
 ### 自动加载
 

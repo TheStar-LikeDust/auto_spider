@@ -1,0 +1,24 @@
+"""
+{description} - Parse steps
+
+Parse stage: parse HTML to extract data.
+"""
+
+from auto_spider import parse, Context
+
+
+@parse()
+def parse_data(context: Context):
+    """Parse HTML content to extract data."""
+    content = context.get('content', '')
+    
+    # TODO: implement parsing logic
+    # Example: extract title, links, etc.
+    data = {
+        'title': 'Example Title',
+        'items': []
+    }
+    
+    # save parsed data to context['data']
+    context['data'] = data
+    return data

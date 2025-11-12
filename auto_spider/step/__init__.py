@@ -9,6 +9,7 @@ from .context import Context
 from .task import Task, generate_task_name
 from .task_result import TaskResult
 from .task_data import TaskData
+from .runner import execute_steps
 
 __all__ = [
     'Context',
@@ -16,4 +17,5 @@ __all__ = [
     'generate_task_name',
     'TaskResult',
     'TaskData',
+    'execute_steps',
 ]

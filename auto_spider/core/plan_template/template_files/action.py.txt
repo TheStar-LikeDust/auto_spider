@@ -1,0 +1,27 @@
+"""
+{description} - Action steps
+
+Action stage: fetch data with spider.
+"""
+
+from auto_spider import action, Context
+
+
+@action()
+def fetch_page(context: Context):
+    """Fetch page content from task url."""
+    url = context.task.get('url')
+    if not url:
+        raise ValueError("Task must have 'url' field")
+    
+    response = context.spider.do_url(url)
+
+    # save raw HTML to context['content']
+    context['content'] = response.text
+    # save metadata to context['result']
+    context['result'] = {
+        'url': url,
+        'status': response.status_code,
+        'length': len(response.text)
+    }
+    return response.text

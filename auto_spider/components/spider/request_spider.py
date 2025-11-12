@@ -28,7 +28,7 @@ class RequestSpider(Spider):
         spider = RequestSpider()
         spider.attach()
         
-        response = spider.do_url('https://example.com', http_method='GET', retry=3)
+        response = spider.do_url('https://example.com', http_method='GET')
         html = response.text
         
         spider.detach()

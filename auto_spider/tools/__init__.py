@@ -1,14 +1,12 @@
 """
 Development tools for auto_spider.
 
-Tools module for auto_spider.
-
-Provides templates and development tools.
+Backward compatibility wrapper for plan_template.
 """
 
-from .templates import generate_plan, generate_actions
+from ..core.plan_template import generate_plan, generate_steps
 
 __all__ = [
     'generate_plan',
-    'generate_actions',
+    'generate_steps',
 ]

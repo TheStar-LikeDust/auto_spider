@@ -1,21 +1,24 @@
 """
-Code template generator.
+Template generator functions.
 
-Generate plan and step templates.
+Generate plan and step files from templates.
 """
 
 from pathlib import Path
-from .template_strings import (
-    STEP_INIT_TEMPLATE,
-    STEP_MODULE_TEMPLATE,
-    PLAN_TEMPLATE,
-    PLAN_SINGLE_FILE_TEMPLATE
-)
+
+# Template file directory
+_TEMPLATE_DIR = Path(__file__).parent / 'template_files'
+
+
+def _load_template(filename: str) -> str:
+    """Load template from file."""
+    template_path = _TEMPLATE_DIR / filename
+    return template_path.read_text(encoding='utf-8')
 
 
 def generate_steps(name: str, description: str = None) -> Path:
     """
-    Generate steps package with template steps.
+    Generate steps package with three modules: action, parse, extract.
     
     Args:
         name: Package name (will generate steps_{name}/)
@@ -26,6 +29,13 @@ def generate_steps(name: str, description: str = None) -> Path:
         
     Example:
         generate_steps('baidu', description='Baidu scraping steps')
+        
+    Generated structure:
+        steps_{name}/
+            __init__.py
+            action.py
+            parse.py
+            extract.py
     """
     if not description:
         description = f'Steps for {name}'
@@ -36,13 +46,23 @@ def generate_steps(name: str, description: str = None) -> Path:
     
     # generate __init__.py
     init_path = package_path / '__init__.py'
-    init_content = STEP_INIT_TEMPLATE.format(description=description)
+    init_content = _load_template('step_init.py.txt').format(description=description)
     init_path.write_text(init_content, encoding='utf-8')
     
-    # generate steps.py
-    steps_path = package_path / 'steps.py'
-    steps_content = STEP_MODULE_TEMPLATE.format(description=f'{description} - Step implementations')
-    steps_path.write_text(steps_content, encoding='utf-8')
+    # generate action.py
+    action_path = package_path / 'action.py'
+    action_content = _load_template('action.py.txt').format(description=description)
+    action_path.write_text(action_content, encoding='utf-8')
+    
+    # generate parse.py
+    parse_path = package_path / 'parse.py'
+    parse_content = _load_template('parse.py.txt').format(description=description)
+    parse_path.write_text(parse_content, encoding='utf-8')
+    
+    # generate extract.py
+    extract_path = package_path / 'extract.py'
+    extract_content = _load_template('extract.py.txt').format(description=description)
+    extract_path.write_text(extract_content, encoding='utf-8')
     
     return package_path
 
@@ -75,10 +95,10 @@ def generate_plan(name: str, description: str = None, single_file: bool = False)
     # choose template based on mode
     if single_file:
         # inline steps mode
-        content = PLAN_SINGLE_FILE_TEMPLATE.format(description=description, name=name)
+        content = _load_template('plan_single.py.txt').format(description=description, name=name)
     else:
         # separate steps package mode
-        content = PLAN_TEMPLATE.format(description=description, name=name)
+        content = _load_template('plan.py.txt').format(description=description, name=name)
         generate_steps(name, description=f'Steps for {name}')
     
     output_path.write_text(content, encoding='utf-8')

@@ -1,0 +1,20 @@
+"""
+{description} - Extract steps
+
+Extract stage: save data to database or file.
+"""
+
+from auto_spider import extract, Context
+
+
+@extract()
+def save_data(context: Context):
+    """Save parsed data to database or file."""
+    data = context.get('data', {})
+    
+    # TODO: implement save logic
+    # Example: save to database, write to file, etc.
+    # db = context.initial.get('db')
+    # db.save(data)
+    
+    return f"Saved {len(data)} items"
