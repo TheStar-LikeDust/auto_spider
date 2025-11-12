@@ -4,8 +4,7 @@ Playwright-based spider implementation.
 Modern browser automation using Playwright.
 """
 
-from typing import Optional, Dict, Any
-from playwright.sync_api import sync_playwright, Browser, Page, Playwright
+from typing import Optional, Dict
 
 from .base_spider import Spider
 
@@ -52,14 +51,17 @@ class PlaywrightSpider(Spider):
         self.timeout = timeout
         self.viewport = viewport or {'width': 1280, 'height': 720}
         
-        self.playwright: Optional[Playwright] = None
-        self.browser: Optional[Browser] = None
-        self.page: Optional[Page] = None
+        self.playwright = None
+        self.browser = None
+        self.page = None
         
         super().__init__()
     
     def _do_attach(self):
         """Launch browser and create page."""
+        # Lazy import to avoid dependency error
+        from playwright.sync_api import sync_playwright
+        
         self.playwright = sync_playwright().start()
         
         browser_launcher = getattr(self.playwright, self.browser_type)
@@ -87,7 +89,7 @@ class PlaywrightSpider(Spider):
         if self.page:
             self.page.context.clear_cookies()
     
-    def get_driver(self) -> Page:
+    def get_driver(self):
         """Get Playwright page instance."""
         return self.page
     

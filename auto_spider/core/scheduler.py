@@ -6,10 +6,10 @@ Multi-process task execution with resource reuse.
 
 import json
 from pathlib import Path
-from typing import List, Any, Callable
+from typing import Callable, List, Any
 from multiprocessing import Pool
-from concurrent.futures import ThreadPoolExecutor
-from ..actions import Context
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from ..step import Context, Task, generate_task_name
 from .registry import execute_plan as _execute_plan
 from .registry import execute_parse as _execute_parse
 from .registry import execute_extract as _execute_extract
@@ -22,23 +22,7 @@ _LOGGER = build_logger('scheduler')
 DEFAULT_MAX_WORKERS = 4
 
 
-class Task(dict):
-    """
-    Task dict with keyword argument initialization.
-    
-    Example:
-        task = Task(name='fetch_baidu', url='https://baidu.com', retry=3)
-        task['url']  # access
-        task.get('retry', 1)  # dict method
-    """
-    
-    def __init__(self, **kwargs):
-        """Initialize task with keyword arguments."""
-        super().__init__(**kwargs)
-    
-    def __repr__(self):
-        name = self.get('name', 'unnamed')
-        return f"Task(name='{name}', {len(self)} fields)"
+# Task and generate_task_name moved to step package
 
 
 def _worker_process_tasks(args):
@@ -75,8 +59,8 @@ def _worker_process_tasks(args):
         _LOGGER.debug(f"Worker initialized - Spider: {type(spider).__name__}, Initial resources: {list(initial.keys())}")
         
         # process each task with new context
-        for task in task_batch:
-            task_name = task.get('name', 'unnamed')
+        for i, task in enumerate(task_batch):
+            task_name = generate_task_name(task, i)
             
             try:
                 _LOGGER.info(f"Executing task: {task_name}")
@@ -145,7 +129,7 @@ def _worker_thread_parse(args):
         Result dict
     """
     task, parses, initial_plan_factory, output_dir = args
-    task_name = task.get('name', 'unnamed')
+    task_name = generate_task_name(task)
     
     try:
         # initialize plan resources
@@ -228,7 +212,7 @@ def _worker_thread_extract(args):
         Result dict
     """
     task, extracts, initial_plan_factory, output_dir = args
-    task_name = task.get('name', 'unnamed')
+    task_name = generate_task_name(task)
     
     try:
         # initialize plan resources

@@ -1,18 +1,20 @@
 """
-Components module for auto_spider.
+Components module.
 
-Contains Context system components implementations.
-Components like spider, db, config, cache should be placed here.
+Provides spider components and base classes.
 
-These components are injected into Context and used by actions.
+Third-party libraries (requests, playwright) are imported 
+inside methods to avoid dependency errors.
 """
 
-from .base_spider import Spider
-from .request_spider import RequestSpider
-from .playwright_spider import PlaywrightSpider
+from .spider import BaseSpider, RequestSpider, PlaywrightSpider
+
+# Alias for backward compatibility
+Spider = BaseSpider
 
 __all__ = [
     'Spider',
+    'BaseSpider',
     'RequestSpider',
     'PlaywrightSpider',
 ]

@@ -27,8 +27,8 @@ from .registry import (
     execute_extract,
 )
 
+from ..step import Task, generate_task_name
 from .scheduler import (
-    Task,
     run_plan,
     run_plan_from_file,
     DEFAULT_MAX_WORKERS,

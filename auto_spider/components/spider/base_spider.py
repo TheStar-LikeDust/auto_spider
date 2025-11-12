@@ -113,3 +113,7 @@ class Spider(ABC):
             Implementation-specific response or None
         """
         return None
+
+
+# Alias for backward compatibility
+BaseSpider = Spider

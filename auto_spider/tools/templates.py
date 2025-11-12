@@ -13,7 +13,7 @@ ACTION_INIT_TEMPLATE = '''"""
 Action module with example actions.
 """
 
-# import to register actions
+# import to register steps
 from .actions import *  # noqa: F401, F403
 '''
 
@@ -61,8 +61,8 @@ def initial_spider():
 def initial_task():
     """Create and return task list."""
     return [
-        Task(name='task1', url='https://example.com'),
-        Task(name='task2', url='https://example.com'),
+        Task(url='https://example.com/page1'),
+        Task(url='https://example.com/page2'),
     ]
 
 
@@ -111,8 +111,8 @@ def initial_spider():
 def initial_task():
     """Create and return task list."""
     return [
-        Task(name='task1', url='https://example.com'),
-        Task(name='task2', url='https://example.com'),
+        Task(url='https://example.com/page1'),
+        Task(url='https://example.com/page2'),
     ]
 
 

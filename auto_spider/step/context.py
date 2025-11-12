@@ -1,5 +1,5 @@
 """
-Context class for action pipeline.
+Context class for step pipeline.
 
 Provides both attribute access (with IDE hints) and dict flexibility.
 """
@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 class Context(dict):
     """
-    Action pipeline context with system resources as attributes.
+    Step pipeline context with system resources as attributes.
     
     System resources (fixed attributes):
         - spider: Spider component for web access
@@ -21,7 +21,7 @@ class Context(dict):
     Dict fields are for business data.
     
     Example:
-        task = {'name': 'fetch_baidu', 'url': 'https://baidu.com'}
+        task = {'url': 'https://baidu.com'}
         initial = {'db': db, 'cache': cache}
         context = Context(spider=my_spider, task=task, initial=initial)
         
@@ -88,7 +88,10 @@ class Context(dict):
         if self.spider:
             resources.append(f"spider={type(self.spider).__name__}")
         if self.task:
-            resources.append(f"task={self.task.get('name', 'unnamed')}")
+            task_name = self.task.get('name') or self.task.get('url', 'task')
+            if isinstance(task_name, str) and len(task_name) > 20:
+                task_name = task_name[:20] + '...'
+            resources.append(f"task={task_name}")
         if self.db:
             resources.append(f"db={type(self.db).__name__}")
         if self.config:

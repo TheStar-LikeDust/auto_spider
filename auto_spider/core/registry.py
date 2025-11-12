@@ -6,7 +6,7 @@ Unified execution logic for different stages.
 """
 
 from typing import Dict, Callable, List, Any, Union
-from ..actions import Context
+from ..step import Context
 from ..logger import build_logger
 
 _LOGGER = build_logger('registry')

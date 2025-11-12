@@ -5,7 +5,6 @@ Simple HTTP spider using requests library.
 """
 
 from typing import Dict, Optional, Union
-from requests import Session, Response
 
 from .base_spider import Spider
 
@@ -55,13 +54,16 @@ class RequestSpider(Spider):
         self.timeout = timeout
         self.verify_ssl = verify_ssl
         self.auto_raise = auto_raise
-        self.session: Optional[Session] = None
-        self.last_response: Optional[Response] = None
+        self.session = None
+        self.last_response = None
         
         super().__init__()
     
     def _do_attach(self):
         """Create requests session."""
+        # Lazy import to avoid dependency error
+        from requests import Session
+        
         self.session = Session()
         self.session.headers.update(self.headers)
     
@@ -76,7 +78,7 @@ class RequestSpider(Spider):
         if self.session:
             self.session.cookies.clear()
     
-    def get_driver(self) -> Session:
+    def get_driver(self):
         """Get requests session instance."""
         return self.session
     
@@ -88,7 +90,7 @@ class RequestSpider(Spider):
         timeout: Optional[Union[int, float]] = None,
         auto_raise: Optional[bool] = None,
         **kwargs
-    ) -> Response:
+    ):
         """
         Universal URL request method with retry support.
         
@@ -97,6 +99,7 @@ class RequestSpider(Spider):
             http_method: HTTP method (GET, POST, PUT, DELETE, OPTIONS)
             retry: Retry count on failure
             timeout: Request timeout
+            auto_raise: Raise exception on request failure
             **kwargs: Additional requests arguments (params, data, json, etc.)
             
         Returns:
