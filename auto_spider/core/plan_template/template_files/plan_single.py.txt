@@ -1,5 +1,5 @@
 """
-{description}
+$description
 
 Plan script with 3 fixed functions and inline steps.
 """
@@ -48,43 +48,75 @@ def fetch_page(context: Context):
 
     # save raw HTML to context['content']
     context['content'] = response.text
+    
     # save metadata to context['result']
     context['result'] = {
         'url': url,
         'status': response.status_code,
         'length': len(response.text)
     }
+    
+    # action stage saves:
+    # - task1_task.json (original task from context.task)
+    # - task1_action.json (result from context['result'])
+    # - task1.html (content from context['content'])
+    
     return response.text
 
 
 @parse()
 def parse_data(context: Context):
     """Parse HTML content to extract data."""
+    from auto_spider.tools.xpath import xpath_extract
+    
+    # read action result (context['input'] from task1_action.json)
+    action_result = context.get('input', {})
+    # read HTML content
     content = context.get('content', '')
+    # access original task if needed
+    original_task = context.task
     
     # TODO: implement parsing logic
     # Example: extract title, links, etc.
+    # titles = xpath_extract(content, '//h1/text()')
+    # links = xpath_extract(content, '//a/@href')
     data = {
         'title': 'Example Title',
-        'items': []
+        'items': [],
+        'source_url': action_result.get('url', '')
     }
     
-    # save parsed data to context['data']
-    context['data'] = data
+    # save parsed data to context['result']
+    context['result'] = data
+    
+    # parse stage saves:
+    # - task1_task.json (original task from context.task)
+    # - task1_action.json (action result from context['action_result'])
+    # - task1_parse.json (parse result from context['result'])
+    # - task1.html (content from context['content'])
+    
     return data
 
 
 @extract()
 def save_data(context: Context):
     """Save parsed data to database or file."""
-    data = context.get('data', {})
+    # read parse result (from task1_parse.json)
+    parse_result = context.get('input', {})
+    
+    # access original task if needed
+    original_task = context.task
     
     # TODO: implement save logic
     # Example: save to database, write to file, etc.
     # db = context.initial.get('db')
-    # db.save(data)
+    # db.save(parse_result)
     
-    return f"Saved {len(data)} items"
+    # extract stage does NOT save files
+    # it only reads: task1_task.json, task1_action.json, task1_parse.json, task1.html
+    
+    item_count = len(parse_result.get('items', []))
+    return f"Saved {item_count} items"
 
 
 # Step lists for each stage
@@ -104,12 +136,12 @@ EXTRACT_LIST = [
 if __name__ == '__main__':
     # Default: run action stage only
     run_plan(initial_spider, initial_task, initial_plan, 
-             actions=ACTION_LIST, plan_name='{name}')
+             actions=ACTION_LIST, plan_name='$name')
     
     # Uncomment to run parse stage
     # run_plan(initial_task=initial_task, initial_plan=initial_plan,
-    #          parses=PARSE_LIST, plan_name='{name}')
+    #          parses=PARSE_LIST, plan_name='$name')
     
     # Uncomment to run extract stage
     # run_plan(initial_task=initial_task, initial_plan=initial_plan,
-    #          extracts=EXTRACT_LIST, plan_name='{name}')
+    #          extracts=EXTRACT_LIST, plan_name='$name')

@@ -1,24 +1,40 @@
 """
-{description} - Parse steps
+$description - Parse steps
 
 Parse stage: parse HTML to extract data.
 """
 
 from auto_spider import parse, Context
+from auto_spider.tools.xpath import xpath_extract
 
 
 @parse()
 def parse_data(context: Context):
     """Parse HTML content to extract data."""
+    # read action result (context['input'] from task1_action.json)
+    action_result = context.get('input', {})
+    # read HTML content
     content = context.get('content', '')
+    # access original task if needed
+    original_task = context.task
     
     # TODO: implement parsing logic
     # Example: extract title, links, etc.
+    # titles = xpath_extract(content, '//h1/text()')
+    # links = xpath_extract(content, '//a/@href')
     data = {
         'title': 'Example Title',
-        'items': []
+        'items': [],
+        'source_url': action_result.get('url', '')
     }
     
-    # save parsed data to context['data']
-    context['data'] = data
+    # save parsed data to context['result']
+    context['result'] = data
+    
+    # parse stage saves:
+    # - task1_task.json (original task from context.task)
+    # - task1_action.json (action result from context['action_result'])
+    # - task1_parse.json (parse result from context['result'])
+    # - task1.html (content from context['content'])
+    
     return data

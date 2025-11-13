@@ -66,6 +66,9 @@ class Context(dict):
         # internal step results storage
         self._step_results = {}  # {step_name: result}
         self._step_history = []  # [result1, result2, ...]
+        
+        # collected tasks for incremental crawling
+        self.tasks = []
     
     def save_step_result(self, step_name: str, result: Any):
         """

@@ -1,5 +1,5 @@
 """
-{description}
+$description
 
 Step modules: action.py, parse.py, extract.py
 """

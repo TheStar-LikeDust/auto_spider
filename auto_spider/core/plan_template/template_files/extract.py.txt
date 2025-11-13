@@ -1,5 +1,5 @@
 """
-{description} - Extract steps
+$description - Extract steps
 
 Extract stage: save data to database or file.
 """
@@ -10,11 +10,19 @@ from auto_spider import extract, Context
 @extract()
 def save_data(context: Context):
     """Save parsed data to database or file."""
-    data = context.get('data', {})
+    # read parse result (from task1_parse.json)
+    parse_result = context.get('input', {})
+    
+    # access original task if needed
+    original_task = context.task
     
     # TODO: implement save logic
     # Example: save to database, write to file, etc.
     # db = context.initial.get('db')
-    # db.save(data)
+    # db.save(parse_result)
     
-    return f"Saved {len(data)} items"
+    # extract stage does NOT save files
+    # it only reads: task1_task.json, task1_action.json, task1_parse.json, task1.html
+    
+    item_count = len(parse_result.get('items', []))
+    return f"Saved {item_count} items"

@@ -1,5 +1,5 @@
 """
-{description}
+$description
 
 Plan script with 3 fixed functions.
 """
@@ -8,7 +8,7 @@ from auto_spider.core import Task, run_plan
 from auto_spider.components import RequestSpider
 
 # import steps to register them
-import steps_{name}  # noqa: F401
+import steps_$name  # noqa: F401
 
 
 def initial_spider():
@@ -56,12 +56,12 @@ EXTRACT_LIST = [
 if __name__ == '__main__':
     # Default: run action stage only
     run_plan(initial_spider, initial_task, initial_plan, 
-             actions=ACTION_LIST, plan_name='{name}')
+             actions=ACTION_LIST, plan_name='$name')
     
     # Uncomment to run parse stage
     # run_plan(initial_task=initial_task, initial_plan=initial_plan,
-    #          parses=PARSE_LIST, plan_name='{name}')
+    #          parses=PARSE_LIST, plan_name='$name')
     
     # Uncomment to run extract stage
     # run_plan(initial_task=initial_task, initial_plan=initial_plan,
-    #          extracts=EXTRACT_LIST, plan_name='{name}')
+    #          extracts=EXTRACT_LIST, plan_name='$name')

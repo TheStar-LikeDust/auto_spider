@@ -35,11 +35,12 @@ from .worker import (
 )
 
 from .storage import (
-    create_output_dir,
+    ensure_output_dir,
+    ensure_plan_dir,
+    create_stage_dir,
     save_task_result,
-    find_latest_output_dir,
-    load_task_result,
-    list_task_results,
+    find_latest_stage_dir,
+    load_directory,
 )
 
 
@@ -70,10 +71,10 @@ __all__ = [
     'start_workers',
     
     # storage
-    'create_output_dir',
+    'ensure_output_dir',
+    'ensure_plan_dir',
+    'create_stage_dir',
     'save_task_result',
-    'find_latest_output_dir',
-    'load_task_result',
-    'list_task_results',
-    
+    'find_latest_stage_dir',
+    'load_directory',
 ]

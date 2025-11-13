@@ -178,8 +178,9 @@ cython_debug/
 tests/data_input_local/
 tests/data_output/
 
-
+playground*
 ref/
 
 # Project documentation
 claude.md
+

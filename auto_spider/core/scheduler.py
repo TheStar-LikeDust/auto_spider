@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 from typing import Callable, List
 from .worker import start_workers
-from .storage import create_output_dir
+from .storage import create_stage_dir
 from .stage import get_tasks_for_stage
 from ..logger import build_logger
 
@@ -39,7 +39,7 @@ _LOGGER = build_logger('scheduler')
 DEFAULT_MAX_WORKERS = 4
 
 
-def log_stage_start(stage: str, tasks: List, max_workers: int, step_names: List[str], output_path: Path):
+def log_stage_start(stage: str, tasks: List, max_workers: int, step_names: List[str], output_path: Path = None):
     """
     Log stage start information with countdown.
     
@@ -48,10 +48,11 @@ def log_stage_start(stage: str, tasks: List, max_workers: int, step_names: List[
         tasks: Task list
         max_workers: Number of workers
         step_names: Step names to execute
-        output_path: Output directory
+        output_path: Output directory (None for extract stage)
     """
     _LOGGER.info(f"Running {stage} stage: {len(tasks)} tasks, {max_workers} workers, {stage}s: {step_names}")
-    _LOGGER.info(f"Output directory: {output_path}")
+    if output_path:
+        _LOGGER.info(f"Output directory: {output_path}")
     _LOGGER.info("")
     
     for i in range(2, 0, -1):
@@ -120,21 +121,21 @@ def run_plan(
     # execute action stage
     if actions:
         tasks = get_tasks_for_stage('action', initial_task=initial_task)
-        output_path = Path(output_dir) if output_dir else create_output_dir(plan_name, 'action')
+        output_path = Path(output_dir) if output_dir else create_stage_dir(plan_name, 'action')
         log_stage_start('action', tasks, max_workers, actions, output_path)
         start_workers(tasks, actions, initial_spider, initial_plan, output_path, 'action', max_workers)
 
     # execute parse stage
     if parses:
         tasks = get_tasks_for_stage('parse', plan_name=plan_name)
-        output_path = Path(output_dir) if output_dir else create_output_dir(plan_name, 'parse')
+        output_path = Path(output_dir) if output_dir else create_stage_dir(plan_name, 'parse')
         log_stage_start('parse', tasks, max_workers, parses, output_path)
         start_workers(tasks, parses, None, initial_plan, output_path, 'parse', max_workers)
 
-    # execute extract stage
+    # execute extract stage (no output directory needed)
     if extracts:
         tasks = get_tasks_for_stage('extract', plan_name=plan_name)
-        output_path = Path(output_dir) if output_dir else create_output_dir(plan_name, 'extract')
+        output_path = None
         log_stage_start('extract', tasks, max_workers, extracts, output_path)
         start_workers(tasks, extracts, None, initial_plan, output_path, 'extract', max_workers)
 

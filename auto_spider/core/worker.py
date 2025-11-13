@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable, List
 from ..step import Context, generate_task_name, execute_steps
 from .registry import get_step
-from .stage import save_stage_result
+from .stage import save_stage_result, setup_context_for_stage
 from .dispatcher import dispatch_tasks
 from ..logger import build_logger
 
@@ -104,28 +104,32 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
             break
         
         task_index, task = item
-        task_name = generate_task_name(task, task_index)
+        # use simple task naming: task1, task2, task3...
+        task_name = f'task{task_index + 1}'
         
         try:
             _LOGGER.info(f"[Worker-{worker_id}] Start task: {task_name}")
             
-            # create context
-            context = Context(spider=spider, task=task, initial=initial) if spider else Context(task=task, initial=initial)
+            # create context with original task
+            # context.task is always the original Task in all stages
+            original_task = task.get('task', task) if isinstance(task, dict) else task
+            context = Context(spider=spider, task=original_task, initial=initial)
             
-            # load previous results from task
-            if stage == 'parse':
-                context['content'] = task.get('content', "")
-                context['result'] = task.get('result', {})
-            elif stage == 'extract':
-                context['content'] = task.get('content', "")
-                context['result'] = task.get('result', {})
-                context['data'] = task.get('data', {})
+            # setup context keys based on stage (unified logic in stage.py)
+            setup_context_for_stage(stage, context, task)
             
             # execute steps
             execute_steps(step_funcs, context)
             
-            # save result
-            save_stage_result(stage, context, output_folder, task_name)
+            # save result (only for action and parse stages)
+            if output_folder:
+                save_stage_result(stage, context, output_folder, task_name)
+            
+            # add collected tasks to queue
+            if context.tasks:
+                _LOGGER.info(f"[Worker-{worker_id}] Collected {len(context.tasks)} new tasks")
+                for new_task in context.tasks:
+                    task_queue.put((None, new_task))
             
             # log completion
             _LOGGER.info(f"[Worker-{worker_id}] Task completed: {task_name}")
