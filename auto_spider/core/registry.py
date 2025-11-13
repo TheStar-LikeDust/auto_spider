@@ -5,7 +5,9 @@ Global registry for actions, parses, and extracts.
 Unified execution logic for different stages.
 """
 
-from typing import Dict, Callable, List, Any, Union
+import sys
+import importlib
+from typing import Dict, Callable, List, Any, Union, Set
 from ..step import Context
 from ..logger import build_logger
 
@@ -15,6 +17,9 @@ _LOGGER = build_logger('registry')
 _ACTION_REGISTRY: Dict[str, Callable] = {}
 _PARSE_REGISTRY: Dict[str, Callable] = {}
 _EXTRACT_REGISTRY: Dict[str, Callable] = {}
+
+# module tracking for hot reload
+_TRACKED_MODULES: Set[str] = set()
 
 
 def register_step(stage: str, name: str, func: Callable, priority: int = 500):
@@ -27,6 +32,10 @@ def register_step(stage: str, name: str, func: Callable, priority: int = 500):
         func: Step function
         priority: Step priority
     """
+    # track module for hot reload
+    if hasattr(func, '__module__'):
+        _TRACKED_MODULES.add(func.__module__)
+    
     if stage == 'action':
         func.priority = priority
         _ACTION_REGISTRY[name] = func
@@ -143,3 +152,51 @@ def get_all_parses() -> Dict[str, Callable]:
 def get_all_extracts() -> Dict[str, Callable]:
     """Get all registered extract functions (backward compatibility)."""
     return get_all_steps('extract')
+
+
+def clear_all_steps():
+    """
+    Clear all registered steps.
+    
+    Used for hot reload to clear old registrations.
+    """
+    global _ACTION_REGISTRY, _PARSE_REGISTRY, _EXTRACT_REGISTRY
+    _ACTION_REGISTRY.clear()
+    _PARSE_REGISTRY.clear()
+    _EXTRACT_REGISTRY.clear()
+    _LOGGER.debug("All step registries cleared")
+
+
+def reload_tracked_modules():
+    """
+    Reload all tracked modules that contain registered steps.
+    
+    This will trigger re-registration of all steps via decorators.
+    Steps must be re-imported after this call.
+    
+    Returns:
+        List of reloaded module names
+    """
+    reloaded = []
+    
+    for module_name in _TRACKED_MODULES:
+        if module_name in sys.modules:
+            try:
+                module = sys.modules[module_name]
+                importlib.reload(module)
+                reloaded.append(module_name)
+                _LOGGER.info(f"Reloaded module: {module_name}")
+            except Exception as e:
+                _LOGGER.error(f"Failed to reload module {module_name}: {e}")
+    
+    return reloaded
+
+
+def get_tracked_modules() -> Set[str]:
+    """
+    Get all tracked module names.
+    
+    Returns:
+        Set of module names that have registered steps
+    """
+    return _TRACKED_MODULES.copy()

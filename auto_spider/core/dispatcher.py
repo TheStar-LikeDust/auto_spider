@@ -10,6 +10,7 @@ from threading import Thread, Barrier as ThreadBarrier
 from queue import Queue
 from typing import List, Callable
 from ..logger import build_logger
+from .signals import WorkerSignal
 
 _LOGGER = build_logger('dispatcher')
 
@@ -88,7 +89,7 @@ def dispatch_tasks(
     
     # send stop signal to workers
     for _ in range(max_workers):
-        task_queue.put(None)
+        task_queue.put(WorkerSignal.SHUTDOWN)
     
     for worker in workers:
         worker.join()

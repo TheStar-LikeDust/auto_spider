@@ -16,6 +16,16 @@ from .registry import (
     get_all_actions,
     get_all_parses,
     get_all_extracts,
+    clear_all_steps,
+    reload_tracked_modules,
+    get_tracked_modules,
+)
+
+from .signals import (
+    WorkerSignal,
+    is_shutdown_signal,
+    is_reload_signal,
+    is_control_signal,
 )
 
 from ..step import Task, generate_task_name, execute_steps
@@ -60,6 +70,17 @@ __all__ = [
     'get_all_parses',
     'get_all_extracts',
     'execute_steps',
+    
+    # registry - reload
+    'clear_all_steps',
+    'reload_tracked_modules',
+    'get_tracked_modules',
+    
+    # signals
+    'WorkerSignal',
+    'is_shutdown_signal',
+    'is_reload_signal',
+    'is_control_signal',
     
     # step
     'Task',
