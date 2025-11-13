@@ -5,15 +5,16 @@ Playwright-based spider implementation with CDP support.
 
 This module provides a simplified, production-ready browser automation solution:
 
-- **Core Approach**: Uses CDP (Chrome DevTools Protocol) to execute JavaScript for element extraction
-- **Design Principle**: KISS - Keep It Simple, one clear solution instead of multiple fallback options
-- **Code Size**: ~320 lines (reduced from 1200+ lines of over-engineered code)
+- **Core Approach**: Uses CDP native methods (DOM.querySelectorAll, DOM.getBoxModel) for element extraction
+- **Design Principle**: KISS - Keep It Simple, delegate CDP operations to cdp_tools module
+- **Code Size**: ~410 lines (spider logic only, CDP operations in cdp_tools)
 
 ## Key Features
 
-1. **Element Extraction**: Via `get_page_info()` using CDP Runtime.evaluate with JavaScript
+1. **Element Extraction**: Via `get_page_info()` using native CDP DOM methods
 2. **Element Interaction**: Via `select_element()` and `select_by_index()` using Playwright API
-3. **Browser Management**: Standard attach/detach lifecycle with automatic CDP initialization
+3. **Screenshot Capture**: Full page and element screenshots via CDP
+4. **Browser Management**: Standard attach/detach lifecycle with automatic CDP initialization
 
 ## API Usage
 
@@ -22,12 +23,16 @@ spider = PlaywrightSpider(enable_cdp=True)
 spider.attach()
 spider.do_url('https://example.com')
 
-# Get all interactive elements
+# Get all interactive elements using CDP native methods
 page_info = spider.get_page_info()
 # Returns: {
 #   'elements': [{'index': 1, 'tag': 'button', 'attributes': {...}, 'position': {...}, 'css': '...', 'xpath': '...'}],
-#   'analysis_info': {'method': 'cdp_javascript', ...}
+#   'analysis_info': {'method': 'cdp_native', ...}
 # }
+
+# Capture screenshots
+full_page = spider.capture_screenshot()
+element_img = spider.capture_element_screenshot(index=1, padding=10)
 
 # Interact with element by index
 spider.select_by_index(1, 'click')
@@ -38,9 +43,10 @@ spider.detach()
 ## Design Decisions
 
 ### What We Kept
-- CDP + JavaScript: Simple, reliable, standard DOM API
+- CDP native methods: Direct DOM queries via CDP, no JavaScript execution
 - Minimal data structure: Only essential fields (tag, attributes, position, selectors)
 - Single code path: No fallbacks, no backward compatibility bloat
+- Modular design: CDP operations delegated to cdp_tools module
 
 ### What We Removed (900+ lines)
 - Complex CDP DOM Snapshot parsing
@@ -49,26 +55,33 @@ spider.detach()
 - Element type/action classification
 - Human-readable descriptions generation
 - Multiple fallback mechanisms
+- All CDP management logic (moved to cdp_tools)
 
-### Why JavaScript Instead of Native CDP
-- **Simpler**: One script vs. complex snapshot parsing
-- **Reliable**: Standard DOM API, no CDP format dependency
-- **Maintainable**: Modify logic by changing JavaScript only
-- **Sufficient**: Performance is good enough for our use case
+### Why CDP Native Methods
+- **Accurate**: Direct box model calculations, no rendering approximations
+- **Modular**: CDP logic isolated in cdp_tools module
+- **Maintainable**: Spider only handles business logic
+- **Extensible**: Easy to add new CDP features in cdp_tools
+
+## Current Features
+
+### CDP Tools Integration
+1. **Screenshot capture**: Full page and element screenshots via CDP Page.captureScreenshot
+2. **Element visibility**: Native CDP box model detection
+3. **Dimension calculation**: Accurate element position and size
 
 ## Future Development
 
 ### Potential Enhancements (Only If Needed)
-1. **Screenshot integration**: Capture element screenshots using CDP Page.captureScreenshot
-2. **Network monitoring**: Use CDP Network domain for request/response tracking
-3. **Performance metrics**: Use CDP Performance domain for page load analysis
-4. **Console logs**: Capture browser console via CDP Runtime.consoleAPICalled
+1. **Advanced selectors**: More sophisticated CSS/XPath generation in cdp_tools
+2. **Element filtering**: Filter by visibility, interaction state in cdp_tools
 
 ### What NOT to Add
 - Multiple element extraction methods (keep one simple solution)
 - Complex visibility/occlusion algorithms (JavaScript handles basic cases)
 - Human-readable descriptions (let AI interpret raw data)
 - Backward compatibility layers (clean break is better)
+- Network monitoring, console logs, performance metrics (not critical for LLM)
 
 ### Refactoring Guidelines
 - **Before adding features**: Ask "Is this really needed?" (YAGNI principle)
@@ -80,17 +93,17 @@ spider.detach()
 
 ### CDP Connection
 - Only works with Chromium-based browsers
-- Auto-initialized in `_do_attach()` when `enable_cdp=True`
-- Uses Playwright's built-in CDP session (`page.context.new_cdp_session()`)
+- Managed by `cdp_tools.init_cdp_client()` and `cdp_tools.close_cdp_client()`
+- Spider only stores cdp_client reference
 
 ### Element Selector Strategy
 - Priority: id > className > tagName
 - XPath: Simplified version for id or basic tag matching
-- No complex selector generation (keep it simple)
+- Selector generation in cdp_tools module
 
 ### Error Handling
 - Minimal try-catch blocks (let it fail principle)
-- Silent failures only for optional features (e.g., CDP domain enablement)
+- CDP operations fail fast in cdp_tools
 - Raise RuntimeError for critical issues (CDP not enabled, page not attached)
 """
 
@@ -98,6 +111,7 @@ import time
 from typing import Optional, Dict, Any, List
 
 from .base_spider import Spider
+from . import cdp_tools
 
 
 class PlaywrightSpider(Spider):
@@ -154,10 +168,7 @@ class PlaywrightSpider(Spider):
         self.playwright = None
         self.browser = None
         self.page = None
-
-        # CDP related
         self.cdp_client = None
-        self.message_id = 0
 
         super().__init__()
 
@@ -185,15 +196,13 @@ class PlaywrightSpider(Spider):
         self.page = self.browser.new_page(viewport=self.viewport)
         self.page.set_default_timeout(self.timeout)
 
-        # Enable CDP if requested
         if self.enable_cdp:
-            self._enable_cdp()
+            self.cdp_client = cdp_tools.init_cdp_client(self.page)
 
     def _do_detach(self):
         """Close browser and cleanup."""
-        # Close CDP connection
-        if self.cdp_client:
-            self.cdp_client = None
+        cdp_tools.close_cdp_client(self.cdp_client)
+        self.cdp_client = None
 
         if self.page:
             self.page.close()
@@ -211,48 +220,6 @@ class PlaywrightSpider(Spider):
         """Clear browser context (cookies, storage)."""
         if self.page:
             self.page.context.clear_cookies()
-
-    def _enable_cdp(self):
-        """Enable CDP connection using Playwright's context."""
-        if self.browser_type != 'chromium':
-            return
-
-        try:
-            self.cdp_client = self.page.context.new_cdp_session(self.page)
-
-            # Enable essential domains
-            self._cdp_send_no_response('Page.enable')
-            self._cdp_send_no_response('Runtime.enable')
-            self._cdp_send_no_response('DOM.enable')
-            self._cdp_send_no_response('Accessibility.enable')
-        except Exception:
-            self.enable_cdp = False
-
-    def _cdp_send_no_response(self, method: str, params: Optional[Dict] = None):
-        """Send CDP command without waiting for response."""
-        if not self.cdp_client:
-            return
-
-        try:
-            self.cdp_client.send(method, params or {})
-        except Exception:
-            pass  # Silently handle for production
-
-    def _cdp_send(self, method: str, params: Optional[Dict] = None) -> Dict:
-        """Send CDP command and wait for response."""
-        if not self.cdp_client:
-            raise RuntimeError("CDP not enabled")
-
-        try:
-            result = self.cdp_client.send(method, params or {})
-            if isinstance(result, dict):
-                return result
-            elif hasattr(result, 'result'):
-                return {'result': result.result}
-            else:
-                return {'raw_response': str(result)}
-        except Exception as e:
-            raise RuntimeError(f"CDP command error: {e}")
 
     def get_driver(self):
         """Get Playwright page instance."""
@@ -275,89 +242,19 @@ class PlaywrightSpider(Spider):
 
     def get_page_info(self) -> Dict[str, Any]:
         """
-        Get page information for AI navigation decision making.
+        Get page information using native CDP methods.
 
         Returns:
-            Dict with page title, URL, and actionable elements with selectors
+            Dict with page title, URL, and actionable elements
         """
         if not self.page:
             raise RuntimeError("Spider not attached")
 
-        if not self.enable_cdp or not self.cdp_client:
-            raise RuntimeError("CDP not enabled")
-
-        return self._get_enhanced_page_info_cdp()
-        
-    def _get_enhanced_page_info_cdp(self) -> Dict[str, Any]:
-        """
-        Enhanced page analysis using CDP features.
-        
-        Use JavaScript with CDP for simpler, more reliable element extraction.
-        """
         if not self.cdp_client:
             raise RuntimeError("CDP not enabled")
 
         start_time = time.time()
-
-        # Use JavaScript to extract elements - simple and reliable
-        script = """
-        (function() {
-            const elements = [];
-            const interactive_tags = ['a', 'button', 'input', 'select', 'textarea'];
-            const interactive_selectors = interactive_tags.join(',') + ',[onclick],[role="button"],[role="link"]';
-            
-            document.querySelectorAll(interactive_selectors).forEach((el, idx) => {
-                const rect = el.getBoundingClientRect();
-                const computed = window.getComputedStyle(el);
-                
-                // Skip invisible elements
-                if (rect.width === 0 || rect.height === 0 || 
-                    computed.display === 'none' || 
-                    computed.visibility === 'hidden' ||
-                    parseFloat(computed.opacity) === 0) {
-                    return;
-                }
-                
-                // Extract attributes
-                const attrs = {};
-                for (let attr of el.attributes) {
-                    attrs[attr.name] = attr.value;
-                }
-                
-                elements.push({
-                    index: elements.length + 1,
-                    tag: el.tagName.toLowerCase(),
-                    attributes: attrs,
-                    position: {
-                        x: Math.round(rect.left + window.scrollX),
-                        y: Math.round(rect.top + window.scrollY),
-                        width: Math.round(rect.width),
-                        height: Math.round(rect.height),
-                        center_x: Math.round(rect.left + window.scrollX + rect.width / 2),
-                        center_y: Math.round(rect.top + window.scrollY + rect.height / 2)
-                    },
-                    css: (() => {
-                        if (el.id) return '#' + el.id;
-                        if (el.className) {
-                            const classes = el.className.split(' ').filter(c => c);
-                            if (classes.length) return el.tagName.toLowerCase() + '.' + classes.join('.');
-                        }
-                        return el.tagName.toLowerCase();
-                    })(),
-                    xpath: el.id ? `//*[@id="${el.id}"]` : `//${el.tagName.toLowerCase()}`
-                });
-            });
-            
-            return elements;
-        })()
-        """
-
-        result = self._cdp_send('Runtime.evaluate', {
-            'expression': script,
-            'returnByValue': True
-        })
-
-        elements = result.get('result', {}).get('value', [])
+        elements = cdp_tools.get_interactive_elements(self.cdp_client)
         processing_time = time.time() - start_time
 
         return {
@@ -365,7 +262,7 @@ class PlaywrightSpider(Spider):
             'url': self.page.url,
             'elements': elements,
             'analysis_info': {
-                'method': 'cdp_javascript',
+                'method': 'cdp_native',
                 'processing_time_ms': round(processing_time * 1000, 2),
                 'interactive_elements_found': len(elements)
             }
@@ -470,3 +367,51 @@ class PlaywrightSpider(Spider):
             locator = element['css']
 
         return self.select_element(locator, action, text, locator_type)
+
+    def capture_screenshot(self, format: str = 'png', quality: int = 100) -> Optional[str]:
+        """
+        Capture full page screenshot.
+        
+        Args:
+            format: Image format ('png' or 'jpeg')
+            quality: JPEG quality 0-100
+            
+        Returns:
+            Base64 encoded image string
+        """
+        if not self.cdp_client:
+            raise RuntimeError("CDP not enabled")
+        
+        return cdp_tools.capture_screenshot(self.cdp_client, format, quality)
+
+    def capture_element_screenshot(self, index: int, format: str = 'png', 
+                                   quality: int = 100, padding: int = 5) -> Optional[str]:
+        """
+        Capture screenshot of specific element by index.
+        
+        Args:
+            index: Element index from get_page_info() (1-based)
+            format: Image format ('png' or 'jpeg')
+            quality: JPEG quality 0-100
+            padding: Extra padding around element
+            
+        Returns:
+            Base64 encoded image string
+        """
+        if not self.cdp_client:
+            raise RuntimeError("CDP not enabled")
+        
+        page_info = self.get_page_info()
+        if index < 1 or index > len(page_info['elements']):
+            return None
+        
+        element = page_info['elements'][index - 1]
+        
+        # Use CDP to find node and capture
+        root_id = cdp_tools.get_document_root(self.cdp_client)
+        node_ids = cdp_tools.query_selector_all(self.cdp_client, root_id, element['css'])
+        
+        if not node_ids:
+            return None
+        
+        return cdp_tools.capture_element_screenshot(self.cdp_client, node_ids[0], format, quality, padding)
