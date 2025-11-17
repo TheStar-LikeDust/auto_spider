@@ -8,7 +8,7 @@ import time
 from multiprocessing import Process, JoinableQueue, Barrier
 from threading import Thread, Barrier as ThreadBarrier
 from queue import Queue
-from typing import List, Callable
+from typing import List, Callable, Optional
 from ..logger import build_logger
 from .signals import WorkerSignal
 
@@ -20,6 +20,7 @@ def dispatch_tasks(
     worker_func: Callable,
     worker_type: str = 'process',
     max_workers: int = 4,
+    rate_limit: Optional[float] = None,
     **worker_kwargs
 ):
     """
@@ -31,12 +32,14 @@ def dispatch_tasks(
     3. Queue.join(): wait for all tasks (including dynamically added) to complete
     
     Supports incremental crawling where tasks can generate new tasks.
+    Rate limiting is achieved by a dedicated feeder thread that controls task feeding speed.
     
     Args:
         tasks: Task list
         worker_func: Worker function to execute each task
         worker_type: 'process' or 'thread'
         max_workers: Number of concurrent workers
+        rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
         **worker_kwargs: Additional arguments passed to worker_func
     """
     if worker_type == 'process':
@@ -52,10 +55,26 @@ def dispatch_tasks(
     else:
         raise ValueError(f"Unknown worker_type: {worker_type}")
     
-    
-    # put all tasks into queue
-    for i, task in enumerate(tasks):
-        task_queue.put((i, task))
+    # feeder thread for rate-limited task feeding
+    feeder_thread = None
+    if rate_limit:
+        task_buffer = [(i, task) for i, task in enumerate(tasks)]
+        
+        def feed_tasks():
+            """Feed tasks to queue at controlled rate"""
+            for i, task_item in enumerate(task_buffer):
+                task_queue.put(task_item)
+                if i < len(task_buffer) - 1:
+                    time.sleep(rate_limit)
+            _LOGGER.debug(f"Feeder completed: {len(task_buffer)} tasks fed")
+        
+        feeder_thread = Thread(target=feed_tasks)
+        feeder_thread.start()
+        _LOGGER.info(f"Rate limiter enabled: {rate_limit}s delay between tasks")
+    else:
+        # no rate limit: put all tasks immediately
+        for i, task in enumerate(tasks):
+            task_queue.put((i, task))
     
     # start workers
     workers = [
@@ -80,6 +99,12 @@ def dispatch_tasks(
     
     # release start barrier, workers begin execution
     start_barrier.wait()
+    
+    # wait for feeder to complete (if rate limiting enabled)
+    if feeder_thread:
+        _LOGGER.info("Waiting for task feeder to complete...")
+        feeder_thread.join()
+        _LOGGER.info("All tasks have been fed to queue")
     
     # wait for all tasks to complete (including dynamically added tasks)
     _LOGGER.info("Waiting for all tasks to complete...")

@@ -26,6 +26,7 @@ def start_workers(
     output_folder: Path,
     stage: str,
     max_workers: int,
+    rate_limit: Optional[float] = None,
     reload_event: Optional[Event] = None
 ):
     """
@@ -42,6 +43,7 @@ def start_workers(
         output_folder: Output directory path
         stage: Stage name ('action', 'parse', 'extract')
         max_workers: Number of concurrent workers
+        rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
         reload_event: Optional event to signal module reload (for daemon mode)
     """
     worker_type = 'process' if stage == 'action' else 'thread'
@@ -51,6 +53,7 @@ def start_workers(
         worker_func=run_worker,
         worker_type=worker_type,
         max_workers=max_workers,
+        rate_limit=rate_limit,
         steps=steps,
         spider_factory=spider_factory,
         initial_factory=initial_factory,

@@ -8,7 +8,8 @@ import sys
 import time
 from pathlib import Path
 from ..logger import build_logger
-from .manager import DaemonManager, DEFAULT_HOST, DEFAULT_PORT, DEFAULT_MAX_WORKERS
+from .config import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_MAX_WORKERS
+from .manager import DaemonManager
 from .client import add_plan, reload, shutdown
 
 _LOGGER = build_logger('daemon.cli')

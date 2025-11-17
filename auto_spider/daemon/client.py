@@ -6,12 +6,7 @@ Simplified client that sends commands and returns responses.
 
 import json
 import socket
-from .manager import DEFAULT_HOST, DEFAULT_PORT
-
-# Command types for daemon communication
-ADD_PLAN = 'add_plan'
-RELOAD = 'reload'
-SHUTDOWN = 'shutdown'
+from .config import DEFAULT_HOST, DEFAULT_PORT, ADD_PLAN, RELOAD, SHUTDOWN
 
 
 def encode_command(cmd: str, data: dict = None) -> bytes:

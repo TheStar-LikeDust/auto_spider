@@ -21,14 +21,10 @@ from ..core.registry import get_step, clear_all_steps, reload_tracked_modules
 from ..core.stage import get_tasks_for_stage, setup_context_for_stage, save_stage_result
 from ..step import Context, execute_steps
 from ..core.storage import create_stage_dir
-from .client import ADD_PLAN, RELOAD, SHUTDOWN, encode_command, decode_command, encode_response, decode_response
+from .config import ADD_PLAN, RELOAD, SHUTDOWN, DEFAULT_HOST, DEFAULT_PORT, DEFAULT_MAX_WORKERS
+from .client import encode_command, decode_command, encode_response, decode_response
 
 _LOGGER = build_logger('daemon.manager')
-
-# Daemon configuration
-DEFAULT_HOST = '127.0.0.1'
-DEFAULT_PORT = 9527
-DEFAULT_MAX_WORKERS = 4
 
 
 class DaemonManager:

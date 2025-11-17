@@ -70,6 +70,7 @@ def run_plan(
         parses: List[str] = None,
         extracts: List[str] = None,
         max_workers: int = DEFAULT_MAX_WORKERS,
+        rate_limit: float = None,
         plan_name: str = None,
         output_dir: str = None
 ):
@@ -92,6 +93,7 @@ def run_plan(
         parses: Parse step names (parse HTML from action results)
         extracts: Extract step names (save data from action and parse results)
         max_workers: Worker pool size (default: 4)
+        rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
         plan_name: Plan name for output directory
         output_dir: Custom output directory
         
@@ -123,21 +125,21 @@ def run_plan(
         tasks = get_tasks_for_stage('action', initial_task=initial_task)
         output_path = Path(output_dir) if output_dir else create_stage_dir(plan_name, 'action')
         log_stage_start('action', tasks, max_workers, actions, output_path)
-        start_workers(tasks, actions, initial_spider, initial_plan, output_path, 'action', max_workers)
+        start_workers(tasks, actions, initial_spider, initial_plan, output_path, 'action', max_workers, rate_limit=rate_limit)
 
     # execute parse stage
     if parses:
         tasks = get_tasks_for_stage('parse', plan_name=plan_name)
         output_path = Path(output_dir) if output_dir else create_stage_dir(plan_name, 'parse')
         log_stage_start('parse', tasks, max_workers, parses, output_path)
-        start_workers(tasks, parses, None, initial_plan, output_path, 'parse', max_workers)
+        start_workers(tasks, parses, None, initial_plan, output_path, 'parse', max_workers, rate_limit=rate_limit)
 
     # execute extract stage (no output directory needed)
     if extracts:
         tasks = get_tasks_for_stage('extract', plan_name=plan_name)
         output_path = None
         log_stage_start('extract', tasks, max_workers, extracts, output_path)
-        start_workers(tasks, extracts, None, initial_plan, output_path, 'extract', max_workers)
+        start_workers(tasks, extracts, None, initial_plan, output_path, 'extract', max_workers, rate_limit=rate_limit)
 
     # TODO: Worker status checking
 
@@ -146,7 +148,8 @@ def run_plan_from_file(
         plan_file: str,
         stage: str = 'action',
         step_names: List[str] = None,
-        max_workers: int = DEFAULT_MAX_WORKERS
+        max_workers: int = DEFAULT_MAX_WORKERS,
+        rate_limit: float = None
 ):
     """
     Wrapper for run_plan that loads plan from template file.
@@ -164,6 +167,7 @@ def run_plan_from_file(
         stage: Stage to run ('action', 'parse', 'extract')
         step_names: Step names to execute (auto-reads from module if None)
         max_workers: Worker pool size (default: 4)
+        rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
         
     Example:
         # Action stage
@@ -212,6 +216,7 @@ def run_plan_from_file(
         'initial_task': initial_task,
         'initial_plan': initial_plan,
         'max_workers': max_workers,
+        'rate_limit': rate_limit,
         'plan_name': plan_path.stem
     }
 

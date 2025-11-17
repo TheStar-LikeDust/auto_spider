@@ -136,7 +136,7 @@ EXTRACT_LIST = [
 if __name__ == '__main__':
     # Default: run action stage only
     run_plan(initial_spider, initial_task, initial_plan, 
-             actions=ACTION_LIST, plan_name='$name')
+             actions=ACTION_LIST, plan_name='$name', rate_limit=3)
     
     # Uncomment to run parse stage
     # run_plan(initial_task=initial_task, initial_plan=initial_plan,

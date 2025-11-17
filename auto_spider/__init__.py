@@ -7,6 +7,8 @@ Workflow:
 3. Execute: core.run_plan() with stage-specific parameters
 """
 
+__version__ = "0.1.0"
+
 # for developing steps
 from .step import Context, Task, TaskResult, TaskData, generate_task_name
 from .core import active, action, parse, extract
