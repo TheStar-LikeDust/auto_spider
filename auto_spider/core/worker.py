@@ -2,7 +2,6 @@
 Task worker for executing steps.
 
 Single worker execution logic for all stages.
-    
 """
 
 from pathlib import Path
@@ -11,56 +10,13 @@ from threading import Event
 from ..step import Context, generate_task_name, execute_steps
 from .registry import get_step, clear_all_steps, reload_tracked_modules
 from .stage import save_stage_result, setup_context_for_stage
-from .dispatcher import dispatch_tasks
-from .signals import WorkerSignal, is_shutdown_signal, is_reload_signal
 from ..logger import build_logger
 
 _LOGGER = build_logger('worker')
 
-
-def start_workers(
-    tasks: List,
-    steps: List[str],
-    spider_factory: Callable,
-    initial_factory: Callable,
-    output_folder: Path,
-    stage: str,
-    max_workers: int,
-    rate_limit: Optional[float] = None,
-    reload_event: Optional[Event] = None
-):
-    """
-    Start workers for any stage.
-    
-    Uses Process for action stage, Thread for parse/extract stages.
-    Workers fetch tasks from Queue until empty.
-    
-    Args:
-        tasks: List of tasks
-        steps: List of step function names
-        spider_factory: Spider factory function (None for parse/extract)
-        initial_factory: Plan factory function
-        output_folder: Output directory path
-        stage: Stage name ('action', 'parse', 'extract')
-        max_workers: Number of concurrent workers
-        rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
-        reload_event: Optional event to signal module reload (for daemon mode)
-    """
-    worker_type = 'process' if stage == 'action' else 'thread'
-    
-    dispatch_tasks(
-        tasks=tasks,
-        worker_func=run_worker,
-        worker_type=worker_type,
-        max_workers=max_workers,
-        rate_limit=rate_limit,
-        steps=steps,
-        spider_factory=spider_factory,
-        initial_factory=initial_factory,
-        output_folder=output_folder,
-        stage=stage,
-        reload_event=reload_event
-    )
+# worker control signals
+SHUTDOWN_SIGNAL = '__SHUTDOWN__'
+RELOAD_SIGNAL = '__RELOAD__'
 
 
 def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spider_factory, initial_factory, output_folder, stage, reload_event=None):
@@ -122,13 +78,13 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
         item = task_queue.get()
         
         # check for shutdown signal
-        if is_shutdown_signal(item):
+        if item == SHUTDOWN_SIGNAL:
             task_queue.task_done()
             _LOGGER.debug(f"[Worker-{worker_id}] Received shutdown signal")
             break
         
         # check for reload signal (alternative to reload_event)
-        if is_reload_signal(item):
+        if item == RELOAD_SIGNAL:
             task_queue.task_done()
             _LOGGER.info(f"[Worker-{worker_id}] Received reload signal, reloading modules...")
             try:

@@ -15,7 +15,7 @@ Usage:
     from auto_spider.tools.xpath import xpath_extract
 """
 
-from ..core.plan_template import generate_plan, generate_steps
+from ..template import generate_plan, generate_steps
 
 __all__ = [
     'generate_plan',

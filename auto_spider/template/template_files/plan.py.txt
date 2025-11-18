@@ -1,0 +1,84 @@
+"""
+$description
+
+Plan script with 3 fixed functions.
+"""
+
+from auto_spider.core import Task, run_plan
+from auto_spider.components import RequestSpider
+
+# import steps to register them
+import steps_$name  # noqa: F401
+
+
+# ============== Configuration ==============
+
+PLAN_CONFIG = {
+    'plan_name': '$name',
+    'max_workers': 4,       # number of concurrent workers
+    'rate_limit': None,     # delay between tasks in seconds (None = no limit)
+    'output_dir': None,     # custom output directory (None = auto create)
+}
+
+# Step lists for each stage
+STAGES = {
+    'action': ['fetch_page'],
+    'parse': ['parse_data'],
+    'extract': ['save_data'],
+}
+
+
+# ============== Plan Functions ==============
+
+def initial_spider():
+    """Create and return spider instance."""
+    return RequestSpider()
+
+
+def initial_task():
+    """Create and return task list."""
+    return [
+        Task(url='https://example.com/page1'),
+        Task(url='https://example.com/page2'),
+    ]
+
+
+def initial_plan():
+    """
+    Initialize and return resources object.
+    
+    Resources will be injected into context.initial
+    """
+    # initialize db, cache, etc
+    initial = {
+        # 'db': Database(),
+        # 'cache': Cache(),
+    }
+    return initial
+
+
+# ============== Execution ==============
+
+if __name__ == '__main__':
+    # Run action stage only
+    run_plan(
+        initial_spider, initial_task, initial_plan,
+        actions=STAGES['action'],
+        **PLAN_CONFIG
+    )
+    
+    # Uncomment to run parse stage
+    # run_plan(
+    #     initial_task=initial_task,
+    #     initial_plan=initial_plan,
+    #     parses=STAGES['parse'],
+    #     **PLAN_CONFIG
+    # )
+    
+    # Uncomment to run extract stage
+    # run_plan(
+    #     initial_task=initial_task,
+    #     initial_plan=initial_plan,
+    #     extracts=STAGES['extract'],
+    #     **PLAN_CONFIG
+    # )

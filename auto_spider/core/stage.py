@@ -6,7 +6,7 @@ Get tasks for stages and save stage results.
 
 from pathlib import Path
 from typing import Callable, List
-from .storage import find_latest_stage_dir, load_directory, save_task_result
+from ..storage import find_latest_stage_dir, load_directory, save_task_result
 from ..step import Context
 
 

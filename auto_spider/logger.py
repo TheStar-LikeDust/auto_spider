@@ -29,12 +29,11 @@ LOGGER_CURRENT_TIME_FORMATTER = '%Y-%m-%d %H:%M:%S'
 
 # --- file handler configuration ---
 LOGGER_FILE_FOLDER_NAME = 'output'
-LOGGER_FILE_ROOT_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), *['..' for i in range(0)]))
 # --- end file handler configuration ---
 
 # --- logger module configuration ---
 LOGGER_STREAM_HANDLER_MARK = 'unique_logger_content'
-LOGGER_FILE_FOLDER_PATH = os.path.join(LOGGER_FILE_ROOT_PATH, LOGGER_FILE_FOLDER_NAME)
+LOGGER_FILE_FOLDER_PATH = LOGGER_FILE_FOLDER_NAME
 LOGGER_FORMATTER = logging.Formatter(LOGGER_CURRENT_MSG_FORMATTER, LOGGER_CURRENT_TIME_FORMATTER)
 
 

@@ -1,8 +1,0 @@
-"""
-$description
-
-Step modules: action.py, parse.py, extract.py
-"""
-
-# import all steps to register them
-from . import action, parse, extract  # noqa: F401

@@ -15,12 +15,11 @@ from queue import Queue as ThreadQueue
 from typing import Callable, Dict, List, Optional
 
 from ..logger import build_logger
-from ..core.signals import WorkerSignal
-from ..core.worker import run_worker
+from ..core.worker import run_worker, SHUTDOWN_SIGNAL, RELOAD_SIGNAL
 from ..core.registry import get_step, clear_all_steps, reload_tracked_modules
 from ..core.stage import get_tasks_for_stage, setup_context_for_stage, save_stage_result
 from ..step import Context, execute_steps
-from ..core.storage import create_stage_dir
+from ..storage import create_stage_dir
 from .config import ADD_PLAN, RELOAD, SHUTDOWN, DEFAULT_HOST, DEFAULT_PORT, DEFAULT_MAX_WORKERS
 from .client import encode_command, decode_command, encode_response, decode_response
 
@@ -207,7 +206,7 @@ class DaemonManager:
             
             # send reload signal via queue
             for _ in range(self.max_workers):
-                self.task_queue.put(WorkerSignal.RELOAD)
+                self.task_queue.put(RELOAD_SIGNAL)
             
             return encode_response(True, 'Reload signal sent')
             
@@ -228,7 +227,7 @@ class DaemonManager:
             # send shutdown signal to workers
             if self.workers:
                 for _ in range(self.max_workers):
-                    self.task_queue.put(WorkerSignal.SHUTDOWN)
+                    self.task_queue.put(SHUTDOWN_SIGNAL)
                 
                 # wait for workers to exit
                 for worker in self.workers:
@@ -347,13 +346,13 @@ class DaemonManager:
                 item = self.task_queue.get()
                 
                 # check for shutdown signal
-                if item == WorkerSignal.SHUTDOWN:
+                if item == SHUTDOWN_SIGNAL:
                     self.task_queue.task_done()
                     _LOGGER.info(f"[Worker-{worker_id}] Received shutdown signal")
                     break
                 
                 # check for reload signal
-                if item == WorkerSignal.RELOAD:
+                if item == RELOAD_SIGNAL:
                     self.task_queue.task_done()
                     _LOGGER.info(f"[Worker-{worker_id}] Reloading modules...")
                     try:

@@ -21,13 +21,6 @@ from .registry import (
     get_tracked_modules,
 )
 
-from .signals import (
-    WorkerSignal,
-    is_shutdown_signal,
-    is_reload_signal,
-    is_control_signal,
-)
-
 from ..step import Task, generate_task_name, execute_steps
 from .scheduler import (
     run_plan,
@@ -40,17 +33,29 @@ from .stage import (
     save_stage_result,
 )
 
-from .worker import (
+from .scheduler import (
     start_workers,
 )
 
-from .storage import (
+from .worker import (
+    SHUTDOWN_SIGNAL,
+    RELOAD_SIGNAL,
+)
+
+from ..storage import (
     ensure_output_dir,
     ensure_plan_dir,
     create_stage_dir,
     save_task_result,
     find_latest_stage_dir,
     load_directory,
+)
+
+from .plan_config import (
+    PlanConfig,
+    DEFAULT_CONFIG,
+    merge_config,
+    load_config_from_module,
 )
 
 
@@ -76,11 +81,9 @@ __all__ = [
     'reload_tracked_modules',
     'get_tracked_modules',
     
-    # signals
-    'WorkerSignal',
-    'is_shutdown_signal',
-    'is_reload_signal',
-    'is_control_signal',
+    # worker signals
+    'SHUTDOWN_SIGNAL',
+    'RELOAD_SIGNAL',
     
     # step
     'Task',
@@ -98,4 +101,10 @@ __all__ = [
     'save_task_result',
     'find_latest_stage_dir',
     'load_directory',
+    
+    # plan config
+    'PlanConfig',
+    'DEFAULT_CONFIG',
+    'merge_config',
+    'load_config_from_module',
 ]
