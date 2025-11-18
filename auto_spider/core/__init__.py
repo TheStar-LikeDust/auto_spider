@@ -43,19 +43,18 @@ from .worker import (
 )
 
 from ..storage import (
-    ensure_output_dir,
-    ensure_plan_dir,
-    create_stage_dir,
-    save_task_result,
-    find_latest_stage_dir,
-    load_directory,
+    configure,
+    initial_storage,
+    save_action_result,
+    load_action_result,
+    save_parse_result,
+    load_parse_result,
 )
 
 from .plan_config import (
     PlanConfig,
     DEFAULT_CONFIG,
-    merge_config,
-    load_config_from_module,
+    DictAttributeMixin,
 )
 
 
@@ -95,16 +94,15 @@ __all__ = [
     'start_workers',
     
     # storage
-    'ensure_output_dir',
-    'ensure_plan_dir',
-    'create_stage_dir',
-    'save_task_result',
-    'find_latest_stage_dir',
-    'load_directory',
+    'configure',
+    'initial_storage',
+    'save_action_result',
+    'load_action_result',
+    'save_parse_result',
+    'load_parse_result',
     
     # plan config
     'PlanConfig',
     'DEFAULT_CONFIG',
-    'merge_config',
-    'load_config_from_module',
+    'DictAttributeMixin',
 ]

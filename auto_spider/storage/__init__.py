@@ -1,25 +1,26 @@
 """
-Storage module for task results.
-
-Provides directory management and file I/O for task results.
+Storage module - unified interface for different backends.
 """
 
-from .manager import (
-    ensure_output_dir,
-    ensure_plan_dir,
-    create_stage_dir,
-    save_task_result,
-    find_latest_stage_dir,
-    load_directory,
-    DEFAULT_OUTPUT_DIR,
+# Import interface functions (routes to backends)
+from .interface import (
+    configure,
+    initial_storage,
+    save_action_result,
+    load_action_result,
+    save_parse_result,
+    load_parse_result,
+    save_failed_task,
+    load_failed_tasks,
 )
 
 __all__ = [
-    'ensure_output_dir',
-    'ensure_plan_dir',
-    'create_stage_dir',
-    'save_task_result',
-    'find_latest_stage_dir',
-    'load_directory',
-    'DEFAULT_OUTPUT_DIR',
+    'configure',
+    'initial_storage',
+    'save_action_result',
+    'load_action_result',
+    'save_parse_result',
+    'load_parse_result',
+    'save_failed_task',
+    'load_failed_tasks',
 ]

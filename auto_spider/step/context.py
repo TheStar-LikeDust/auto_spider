@@ -14,20 +14,28 @@ class Context(dict):
     System resources (fixed attributes):
         - spider: Spider component for web access
         - task: Task data dict for current scraping task
-        - db: Database connection
-        - config: Configuration object
-        - cache: Cache component
+        - initial: Resources from initial_plan (db, cache, etc)
+        - config: PlanConfig instance with plan settings
+        - db: Database connection (deprecated, use initial)
+        - cache: Cache component (deprecated, use initial)
     
     Dict fields are for business data.
     
     Example:
+        from auto_spider.core import PlanConfig
+        
+        PLAN_CONFIG = PlanConfig()
+        PLAN_CONFIG.PLAN_NAME = 'myplan'
+        PLAN_CONFIG.MAX_WORKERS = 2
+        
         task = {'url': 'https://baidu.com'}
         initial = {'db': db, 'cache': cache}
-        context = Context(spider=my_spider, task=task, initial=initial)
+        context = Context(spider=my_spider, task=task, initial=initial, config=PLAN_CONFIG)
         
         # attribute access (with IDE hints)
         url = context.task['url']
         content = context.spider.do_url(url)
+        max_workers = context.config.MAX_WORKERS
         
         # dict access (flexible)
         context['html'] = content
@@ -50,9 +58,9 @@ class Context(dict):
             spider: Spider instance
             task: Task dict
             initial: Initial resources object from initial_plan
-            db: Database instance (deprecated)
-            config: Config instance (deprecated)
-            cache: Cache instance (deprecated)
+            db: Database instance (deprecated, use initial)
+            config: PlanConfig instance with plan settings
+            cache: Cache instance (deprecated, use initial)
             **kwargs: Business data
         """
         super().__init__(**kwargs)

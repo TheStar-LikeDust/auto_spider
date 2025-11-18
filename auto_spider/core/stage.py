@@ -6,7 +6,7 @@ Get tasks for stages and save stage results.
 
 from pathlib import Path
 from typing import Callable, List
-from ..storage import find_latest_stage_dir, load_directory, save_task_result
+from ..storage import load_action_result, load_parse_result, save_action_result, save_parse_result
 from ..step import Context
 
 
@@ -41,8 +41,7 @@ def get_tasks_for_stage(stage: str, plan_name: str = None, initial_task: Callabl
     
     # parse stage: load action results
     elif stage == 'parse':
-        action_dir = find_latest_stage_dir(plan_name, 'action')
-        loaded_tasks = load_directory(action_dir)
+        loaded_tasks = load_action_result()
         
         tasks = []
         for loaded in loaded_tasks:
@@ -57,8 +56,7 @@ def get_tasks_for_stage(stage: str, plan_name: str = None, initial_task: Callabl
     
     # extract stage: load parse results
     elif stage == 'extract':
-        parse_dir = find_latest_stage_dir(plan_name, 'parse')
-        loaded_tasks = load_directory(parse_dir)
+        loaded_tasks = load_parse_result()
         
         tasks = []
         for loaded in loaded_tasks:
@@ -108,7 +106,7 @@ def setup_context_for_stage(stage: str, context: Context, task_dict: dict):
         context['parse_result'] = task_dict.get('parse_result', {})
 
 
-def save_stage_result(stage: str, context: Context, output_dir: Path, task_name: str):
+def save_stage_result(stage: str, context: Context, plan_name: str, task_name: str):
     """
     Save stage result by reading from context keys.
     
@@ -120,40 +118,21 @@ def save_stage_result(stage: str, context: Context, output_dir: Path, task_name:
     Args:
         stage: Stage type ('action', 'parse', 'extract')
         context: Context object with results
-        output_dir: Output directory path
+        plan_name: Plan name
         task_name: Task name (e.g., 'task1')
     """
     if stage == 'action':
-        # save original task
-        task = context.task
-        save_task_result(output_dir, f'{task_name}_task', dict(task), 'json')
-        
-        # save action result
+        task = dict(context.task)
         action_result = context.get('result', {})
-        save_task_result(output_dir, f'{task_name}_action', action_result, 'json')
-        
-        # save content
-        content = context.get('content')
-        if content is not None:
-            save_task_result(output_dir, task_name, content, 'html')
+        content = context.get('content', '')
+        save_action_result(task_name, task, action_result, content)
     
     elif stage == 'parse':
-        # save original task
-        task = context.task
-        save_task_result(output_dir, f'{task_name}_task', dict(task), 'json')
-        
-        # save action result (from context)
+        task = dict(context.task)
         action_result = context.get('action_result', {})
-        save_task_result(output_dir, f'{task_name}_action', action_result, 'json')
-        
-        # save parse result
         parse_result = context.get('result', {})
-        save_task_result(output_dir, f'{task_name}_parse', parse_result, 'json')
-        
-        # save content
-        content = context.get('content')
-        if content is not None:
-            save_task_result(output_dir, task_name, content, 'html')
+        content = context.get('content', '')
+        save_parse_result(task_name, task, action_result, parse_result, content)
     
     elif stage == 'extract':
         # extract stage: read only, no save

@@ -4,7 +4,7 @@ $description
 Plan script with 3 fixed functions.
 """
 
-from auto_spider.core import Task, run_plan
+from auto_spider.core import Task, run_plan, PlanConfig
 from auto_spider.components import RequestSpider
 
 # import steps to register them
@@ -13,12 +13,12 @@ import steps_$name  # noqa: F401
 
 # ============== Configuration ==============
 
-PLAN_CONFIG = {
-    'plan_name': '$name',
-    'max_workers': 4,       # number of concurrent workers
-    'rate_limit': None,     # delay between tasks in seconds (None = no limit)
-    'output_dir': None,     # custom output directory (None = auto create)
-}
+# Create config instance
+PLAN_CONFIG = PlanConfig()
+PLAN_CONFIG.PLAN_NAME = '$name'
+PLAN_CONFIG.MAX_WORKERS = 4           # number of concurrent workers
+PLAN_CONFIG.RATE_LIMIT = None         # delay between tasks in seconds (None = no limit)
+PLAN_CONFIG.OUTPUT_DIR = None         # custom output directory (None = auto create)
 
 # Step lists for each stage
 STAGES = {
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     run_plan(
         initial_spider, initial_task, initial_plan,
         actions=STAGES['action'],
-        **PLAN_CONFIG
+        config=PLAN_CONFIG
     )
     
     # Uncomment to run parse stage
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     #     initial_task=initial_task,
     #     initial_plan=initial_plan,
     #     parses=STAGES['parse'],
-    #     **PLAN_CONFIG
+    #     config=PLAN_CONFIG
     # )
     
     # Uncomment to run extract stage
@@ -80,5 +80,5 @@ if __name__ == '__main__':
     #     initial_task=initial_task,
     #     initial_plan=initial_plan,
     #     extracts=STAGES['extract'],
-    #     **PLAN_CONFIG
+    #     config=PLAN_CONFIG
     # )

@@ -2,166 +2,152 @@
 Plan configuration management.
 
 Provides default configuration and config merge utilities.
+
+Configuration Fields
+--------------------
+PLAN_NAME : str
+    Plan name for output directory naming
+    Used by: scheduler, storage
+    
+MAX_WORKERS : int
+    Number of concurrent workers (default: 4)
+    Used by: scheduler, dispatcher
+    
+RATE_LIMIT : float or None
+    Delay between tasks in seconds (None = no limit)
+    Example: 1.0 = 1 task/sec, 0.5 = 2 tasks/sec
+    Used by: scheduler, dispatcher
+    
+OUTPUT_DIR : str or None
+    Custom output directory (None = auto create based on PLAN_NAME)
+    Used by: scheduler, storage
+
+STORAGE_BACKEND : str
+    Storage backend type ('file', 'shelve', 'sqlite', 'redis')
+    Default: 'file'
+    Used by: storage
+    
+STORAGE_OPTIONS : dict
+    Backend-specific options
+    Example: {'base_dir': 'output'} for file/shelve
+    Used by: storage
+
+Usage in Modules
+----------------
+scheduler.py:
+    - Reads: PLAN_NAME, MAX_WORKERS, RATE_LIMIT, OUTPUT_DIR
+    - Creates output directories using PLAN_NAME
+    - Controls worker count via MAX_WORKERS
+    - Applies rate limiting via RATE_LIMIT
+
+storage.py:
+    - Reads: PLAN_NAME, OUTPUT_DIR
+    - Creates stage directories based on PLAN_NAME
+    - Uses OUTPUT_DIR if specified
+
+worker.py:
+    - Passes config to Context
+    - Does not directly read config values
+
+context.py:
+    - Stores config as context.config
+    - Available in all step functions via context.config
+
+User Steps:
+    @action()
+    def my_step(context: Context):
+        # Access any config value
+        max_workers = context.config.MAX_WORKERS
+        plan_name = context.config.PLAN_NAME
+
+Recommended Usage
+-----------------
+# In plan file
+PLAN_CONFIG = PlanConfig()
+PLAN_CONFIG.PLAN_NAME = 'myplan'
+PLAN_CONFIG.MAX_WORKERS = 4
+PLAN_CONFIG.RATE_LIMIT = 1.0
+PLAN_CONFIG.OUTPUT_DIR = None
+
+# Pass to run_plan
+run_plan(..., config=PLAN_CONFIG)
+
+# Access in step
+@action()
+def fetch_page(context: Context):
+    workers = context.config.MAX_WORKERS
 """
 
 from typing import Optional
 
 
-class PlanConfig(dict):
+class DictAttributeMixin:
     """
-    Plan execution configuration with dict and attribute access.
+    Mixin for dict-attribute synchronization.
     
-    Supports both styles:
-        config.max_workers          # attribute access (with IDE hints)
-        config['max_workers']       # dict access (flexible)
-    
-    Config fields:
-        plan_name: Plan name for output directory
-        max_workers: Number of concurrent workers
-        rate_limit: Delay between tasks in seconds (None = no limit)
-        output_dir: Custom output directory (None = auto create)
-    
-    Example:
-        # Use default config
-        config = DEFAULT_CONFIG.copy()
-        
-        # Override specific values
-        config = PlanConfig(plan_name='myplan', max_workers=2)
-        
-        # Merge configs
-        config = merge_config(DEFAULT_CONFIG, {'rate_limit': 1.0})
+    Provides automatic sync between dict access and attribute access:
+        obj.key = value  <->  obj['key'] = value
     """
-    
-    def __init__(
-        self,
-        plan_name: Optional[str] = None,
-        max_workers: int = 4,
-        rate_limit: Optional[float] = None,
-        output_dir: Optional[str] = None,
-        **kwargs
-    ):
-        """
-        Initialize plan configuration.
-        
-        Args:
-            plan_name: Plan name for output directory
-            max_workers: Number of concurrent workers (default: 4)
-            rate_limit: Delay between tasks in seconds (None = no limit)
-            output_dir: Custom output directory (None = auto create)
-            **kwargs: Additional config fields
-        """
-        super().__init__(**kwargs)
-        self.plan_name = plan_name
-        self.max_workers = max_workers
-        self.rate_limit = rate_limit
-        self.output_dir = output_dir
-        
-        # also store in dict for dict access
-        self['plan_name'] = plan_name
-        self['max_workers'] = max_workers
-        self['rate_limit'] = rate_limit
-        self['output_dir'] = output_dir
-        
-        # store additional kwargs
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-            self[key] = value
     
     def __setitem__(self, key, value):
         """Sync dict and attribute access."""
         super().__setitem__(key, value)
         setattr(self, key, value)
     
-    def __repr__(self):
-        return f"PlanConfig(plan_name={self.plan_name!r}, max_workers={self.max_workers}, rate_limit={self.rate_limit})"
-    
-    def copy(self):
-        """Create a copy of config."""
-        return PlanConfig(
-            plan_name=self.plan_name,
-            max_workers=self.max_workers,
-            rate_limit=self.rate_limit,
-            output_dir=self.output_dir,
-            **{k: v for k, v in self.items() if k not in ['plan_name', 'max_workers', 'rate_limit', 'output_dir']}
-        )
+    def __setattr__(self, key, value):
+        """Sync attribute and dict access."""
+        super().__setattr__(key, value)
+        if isinstance(self, dict):
+            dict.__setitem__(self, key, value)
 
 
-# Default configuration
-DEFAULT_CONFIG = PlanConfig(
-    plan_name=None,
-    max_workers=4,
-    rate_limit=None,
-    output_dir=None,
-)
-
-
-def merge_config(base: PlanConfig, overrides: dict) -> PlanConfig:
+class PlanConfig(dict, DictAttributeMixin):
     """
-    Merge base config with override values.
+    Plan execution configuration.
     
-    Creates new config with override values taking precedence.
-    Only non-None values from overrides are applied.
+    Config Fields (all uppercase for clarity):
+        PLAN_NAME: str - Plan name for output directory
+        MAX_WORKERS: int - Number of concurrent workers
+        RATE_LIMIT: float - Delay between tasks in seconds
+        OUTPUT_DIR: str - Custom output directory
     
-    Args:
-        base: Base configuration
-        overrides: Dict of override values
-        
-    Returns:
-        New PlanConfig with merged values
-        
+    Access methods:
+        config.PLAN_NAME          # attribute access (with IDE hints)
+        config['PLAN_NAME']       # dict access (flexible)
+    
     Example:
-        config = merge_config(DEFAULT_CONFIG, {
-            'plan_name': 'myplan',
-            'max_workers': 2,
-            'rate_limit': 1.0
-        })
+        PLAN_CONFIG = PlanConfig()
+        PLAN_CONFIG.PLAN_NAME = 'myplan'
+        PLAN_CONFIG.MAX_WORKERS = 4
+        PLAN_CONFIG.RATE_LIMIT = 1.0
     """
-    # start with base values
-    merged = base.copy()
     
-    # apply overrides (only if not None)
-    for key, value in overrides.items():
-        if value is not None:
-            merged[key] = value
+    # Plan name for output directory
+    PLAN_NAME: Optional[str] = None
     
-    return merged
+    # Number of concurrent workers
+    MAX_WORKERS: int = 4
+    
+    # Delay between tasks (seconds)
+    RATE_LIMIT: Optional[float] = None
+    
+    # Custom output directory
+    OUTPUT_DIR: Optional[str] = None
+    
+    # Storage backend type
+    STORAGE_BACKEND: str = 'file'
+    
+    # Storage backend options
+    STORAGE_OPTIONS: dict = None
+    
+    # Use timestamp in storage directory name (True: action_20241118_150000, False: action)
+    STORAGE_TIMESTAMP: bool = True
+    
+    def __init__(self):
+        super().__init__()
+        if self.STORAGE_OPTIONS is None:
+            self.STORAGE_OPTIONS = {}
 
 
-def load_config_from_module(module) -> PlanConfig:
-    """
-    Load configuration from plan module.
-    
-    Reads PLAN_CONFIG dict or individual config variables from module.
-    
-    Args:
-        module: Plan module object
-        
-    Returns:
-        PlanConfig object loaded from module
-        
-    Example:
-        # In plan file:
-        PLAN_CONFIG = {
-            'plan_name': 'myplan',
-            'max_workers': 2,
-            'rate_limit': 1.0
-        }
-        
-        # Or individual variables:
-        PLAN_NAME = 'myplan'
-        MAX_WORKERS = 2
-        RATE_LIMIT = 1.0
-    """
-    # Try to load PLAN_CONFIG dict first
-    config_dict = getattr(module, 'PLAN_CONFIG', None)
-    
-    if config_dict:
-        return PlanConfig(**config_dict)
-    
-    # Fallback: load individual variables
-    return PlanConfig(
-        plan_name=getattr(module, 'PLAN_NAME', None),
-        max_workers=getattr(module, 'MAX_WORKERS', 4),
-        rate_limit=getattr(module, 'RATE_LIMIT', None),
-        output_dir=getattr(module, 'OUTPUT_DIR', None),
-    )
+# Default configuration instance
+DEFAULT_CONFIG = PlanConfig()

@@ -1,264 +1,408 @@
 # Auto Spider
 
-简单高效的三阶段网页爬虫框架：下载（Action）→ 解析（Parse）→ 保存（Extract）
+三阶段爬虫框架：Action（下载）→ Parse（解析）→ Extract（保存）
 
-## 特性
+## 简介
 
-- ✅ **三阶段分离**：下载、解析、保存独立运行，便于调试和迭代
-- ✅ **自动化调度**：多进程下载、多线程解析，自动管理并发
-- ✅ **数据追溯**：每个阶段保存完整数据链，便于查看和回溯
-- ✅ **零依赖核心**：核心框架无第三方依赖，Spider 按需安装
-- ✅ **简单直观**：装饰器定义步骤，Context 传递数据，一目了然
+Auto Spider 是一个简单高效的爬虫框架，将爬虫流程分为三个独立阶段，每个阶段可以独立运行和调试。使用装饰器注册步骤函数，框架自动处理并发、数据传递和存储。
+
+核心特性：三阶段分离、自动并发调度、数据自动追溯、装饰器注册、零依赖核心
 
 ## 安装
 
 ```bash
-# 安装核心框架
-pip install -e .
-
-# 可选：HTTP 爬虫支持
-pip install requests
-
-# 可选：浏览器自动化支持
-pip install playwright
+pip install -e .                    # 核心框架
+pip install requests                # HTTP爬虫（可选）
+pip install playwright              # 浏览器自动化（可选）
 playwright install chromium
 ```
 
-## 快速开始
+## CLI 命令
 
-### 1. 创建项目
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `python -m auto_spider generate <plan>` | 生成项目模板 | `python -m auto_spider generate myplan` |
+| `python -m auto_spider run <file> <step> -s <stage>` | 运行指定阶段 | `python -m auto_spider run plan_myplan.py fetch_page -s action` |
+| `python -m auto_spider run <file> <step> -w <num>` | 指定worker数量 | `python -m auto_spider run plan_myplan.py fetch_page -w 8` |
+| `python <plan_file>.py` | 直接运行计划文件 | `python plan_myplan.py` |
+
+## 完整爬虫开发流程
+
+### 一、生成项目模板
 
 ```bash
-# 生成项目模板
 python -m auto_spider generate myplan
-
-# 生成后的目录结构：
-# plan_myplan.py         - 主程序文件
-# steps_myplan/          - 步骤包
-#   action.py            - Action 阶段（下载）
-#   parse.py             - Parse 阶段（解析）
-#   extract.py           - Extract 阶段（保存）
 ```
 
-### 2. 编写三个阶段
+生成的目录结构：
+```
+plan_myplan.py          # 主程序文件
+steps_myplan/           # 步骤包
+  ├── __init__.py
+  ├── action.py         # Action阶段（下载）
+  ├── parse.py          # Parse阶段（解析）
+  └── extract.py        # Extract阶段（保存）
+```
 
-**Action 阶段** - 下载页面：
+### 二、配置 Spider 和 Task
+
+编辑 `plan_myplan.py`，配置爬虫和任务：
 
 ```python
-# steps_myplan/action.py
-from auto_spider import action, Context
+from auto_spider import Task, PlanConfig
+from auto_spider.components import RequestSpider  # 或 PlaywrightSpider
+
+# 1. 配置参数
+PLAN_CONFIG = PlanConfig()
+PLAN_CONFIG.PLAN_NAME = 'myplan'
+PLAN_CONFIG.MAX_WORKERS = 4
+PLAN_CONFIG.RATE_LIMIT = 1.0  # 每个任务间隔1秒
+
+# 2. 初始化 Spider（仅 Action 阶段需要）
+def initial_spider():
+    return RequestSpider()  # 或 PlaywrightSpider(headless=True)
+
+# Spider说明：
+# RequestSpider - HTTP请求爬虫，轻量快速，适合静态页面
+# PlaywrightSpider - 浏览器自动化，支持JS渲染，适合动态页面
+
+# 3. 定义任务列表
+def initial_task():
+    return [
+        Task(url='https://example.com/page1', page_type='list'),
+        Task(url='https://example.com/page2', retry=3),
+        Task(url='https://example.com/page3', category='tech'),
+    ]
+
+# Task说明：
+# Task本质是dict，可传入任意参数
+# 在action阶段通过 context.task.get('key') 获取
+# url是常用参数，其他参数根据需求自定义
+
+# 4. 初始化资源（可选，如数据库连接）
+def initial_plan():
+    return {}
+```
+
+### 三、编写三个阶段的步骤函数
+
+#### 1. Action 阶段 - 下载页面
+
+编辑 `steps_myplan/action.py`：
+
+```python
+from auto_spider import action, Context, Task
 
 @action()
 def fetch_page(context: Context):
-    """下载页面内容"""
+    """下载页面"""
     url = context.task.get('url')
     response = context.spider.do_url(url)
     
-    # 保存 HTML 内容
     context['content'] = response.text
+    context['result'] = {'url': url, 'status': response.status_code}
+
+# 增量爬取：动态添加新任务到队列
+@action()
+def fetch_list(context: Context):
+    """列表页提取详情页链接"""
+    url = context.task.get('url')
+    response = context.spider.do_url(url)
     
-    # 保存元数据
-    context['result'] = {
-        'url': url,
-        'status': response.status_code,
-        'length': len(response.text)
-    }
+    detail_urls = extract_links(response.text)
     
-    return response.text
+    # 添加新任务到队列
+    for detail_url in detail_urls:
+        context.tasks.append(Task(url=detail_url))
+    
+    context['content'] = response.text
 ```
 
-**Parse 阶段** - 解析数据：
+> context['content'] 必须设置，用于传递HTML给后续阶段
+>
+> context['result'] 会自动保存为 task1_action.json
+>
+> 使用 context.tasks.append() 添加新任务，框架自动加入队列
+
+#### 2. Parse 阶段 - 解析数据
+
+编辑 `steps_myplan/parse.py`：
 
 ```python
-# steps_myplan/parse.py
 from auto_spider import parse, Context
 from auto_spider.tools.xpath import xpath_extract
 
 @parse()
 def parse_data(context: Context):
-    """解析页面数据"""
-    # 读取 action 阶段的结果
-    action_result = context.get('input', {})
+    """解析HTML"""
     content = context.get('content', '')
+    action_result = context.get('input', {})
     
-    # 解析数据
     data = {
         'title': xpath_extract(content, '//h1/text()'),
         'links': xpath_extract(content, '//a/@href'),
-        'source_url': action_result.get('url', '')
+        'source_url': action_result.get('url')
     }
     
-    # 保存解析结果
     context['result'] = data
-    return data
 ```
 
-**Extract 阶段** - 保存数据：
+> context['content'] 来自Action阶段的HTML
+>
+> context['input'] 来自Action阶段的result
+>
+> context['result'] 会传递给Extract阶段
+
+#### 3. Extract 阶段 - 保存数据
+
+编辑 `steps_myplan/extract.py`：
 
 ```python
-# steps_myplan/extract.py
 from auto_spider import extract, Context
 
 @extract()
 def save_data(context: Context):
-    """保存数据到数据库"""
-    # 读取 parse 阶段的结果
+    """数据库入库操作"""
     parse_result = context.get('input', {})
     
-    # 保存到数据库
+    # 从initial_plan获取数据库连接
     # db = context.initial.get('db')
-    # db.save(parse_result)
-    
-    print(f"Saved: {parse_result.get('title')}")
-    return "saved"
+    # 
+    # 执行数据库写入操作
+    # db.insert('articles', {
+    #     'title': parse_result.get('title'),
+    #     'content': parse_result.get('content'),
+    #     'links': parse_result.get('links')
+    # })
+    # 
+    # 或执行其他副作用操作：发送通知、更新缓存等
 ```
 
-### 3. 运行三个阶段
+> Extract阶段用于执行副作用操作（数据库写入、API调用等）
+>
+> 此阶段不保存文件，只读取Parse结果进行处理
+
+### 四、运行三个阶段
+
+#### 方式一：修改主文件运行
+
+编辑 `plan_myplan.py` 底部：
+
+```python
+if __name__ == '__main__':
+    from auto_spider import run_plan
+    
+    # 1. 运行 Action 阶段
+    run_plan(initial_spider, initial_task, initial_plan,
+             actions=['fetch_page'], config=PLAN_CONFIG)
+    
+    # 2. 运行 Parse 阶段
+    # run_plan(None, initial_task, initial_plan,
+    #          parses=['parse_data'], config=PLAN_CONFIG)
+    
+    # 3. 运行 Extract 阶段
+    # run_plan(None, initial_task, initial_plan,
+    #          extracts=['save_data'], config=PLAN_CONFIG)
+```
+
+运行：
+```bash
+# 注释掉parse和extract，运行action
+python plan_myplan.py
+
+# 注释掉action和extract，取消注释parse，运行parse  
+python plan_myplan.py
+
+# 注释掉action和parse，取消注释extract，运行extract
+python plan_myplan.py
+```
+
+#### 方式二：使用CLI命令
 
 ```bash
-# 1. Action 阶段：下载页面
-python plan_myplan.py
+# 运行 Action 阶段
+python -m auto_spider run plan_myplan.py fetch_page -s action
 
-# 2. 修改 plan_myplan.py，注释掉 action，取消注释 parse
-# 3. Parse 阶段：解析数据
-python plan_myplan.py
+# 运行 Parse 阶段
+python -m auto_spider run plan_myplan.py parse_data -s parse
 
-# 4. 修改 plan_myplan.py，注释掉 parse，取消注释 extract
-# 5. Extract 阶段：保存数据
-python plan_myplan.py
+# 运行 Extract 阶段
+python -m auto_spider run plan_myplan.py save_data -s extract
 ```
 
-## 数据流向
+### 五、理解执行流程
 
-### Context Keys 规范
+#### 执行流程图
 
-所有阶段共享统一的 Context 结构，但 key 的含义在不同阶段有所不同：
+```
+初始化阶段
+├── 加载配置 (PLAN_CONFIG)
+├── 调用 initial_spider() → 创建Spider实例
+├── 调用 initial_task() → 生成任务列表
+└── 调用 initial_plan() → 初始化资源
 
-| Context Key | Action 阶段 | Parse 阶段 | Extract 阶段 |
-|------------|-----------|----------|------------|
-| `context.task` | 原始 Task | 原始 Task | 原始 Task |
-| `context['input']` | 原始 Task | action 结果 | parse 结果 |
-| `context['content']` | HTML 内容 | HTML 内容 | HTML 内容 |
-| `context['result']` | action 结果 | parse 结果 | - |
+Action阶段 (多进程)
+├── Scheduler: 分发任务到Queue
+├── Worker-1..N: 从Queue获取任务
+│   ├── 执行 @action() 装饰的函数
+│   ├── Spider下载数据 → context['content']
+│   └── 保存结果 → output/myplan_action_*/task1.html
+└── 等待所有任务完成
 
-**关键原则**：
-- `context.task` 在所有阶段都是**原始 Task**，永不改变
-- `context['input']` 是**当前阶段的输入**，每个阶段不同
-- `context['content']` 是 **HTML 内容**，在所有阶段都存在
+Parse阶段 (多线程)
+├── Stage: 自动加载Action阶段输出
+├── Worker-1..N: 读取任务数据
+│   ├── 执行 @parse() 装饰的函数
+│   ├── 解析HTML → context['result']
+│   └── 保存结果 → output/myplan_parse_*/task1_parse.json
+└── 等待所有任务完成
 
-### 文件保存结构
+Extract阶段 (多线程)
+├── Stage: 自动加载Parse阶段输出
+├── Worker-1..N: 读取任务数据
+│   ├── 执行 @extract() 装饰的函数
+│   └── 执行副作用（数据库写入等）
+└── 等待所有任务完成
+```
 
-每个阶段自动保存完整的数据链条：
+#### Context 数据传递
+
+| Context Key | Action | Parse | Extract | 说明 |
+|------------|--------|-------|---------|------|
+| `context.task` | 原始Task | 原始Task | 原始Task | 永不改变 |
+| `context['input']` | 原始Task | action的result | parse的result | 当前阶段输入 |
+| `context['content']` | HTML | HTML | HTML | 在所有阶段存在 |
+| `context['result']` | 设置 | 设置 | - | 当前阶段输出 |
+| `context.spider` | Spider实例 | None | None | 仅Action阶段 |
+| `context.initial` | 资源字典 | 资源字典 | 资源字典 | 共享资源 |
+
+#### 文件保存结构
 
 ```
 output/
-├── myplan_action_20241113_100000/
-│   ├── task1_task.json      # 原始 Task
-│   ├── task1_action.json    # action 结果
-│   └── task1.html           # HTML 内容
+├── myplan_action_20241118_100000/
+│   ├── task1_task.json      # 原始Task
+│   ├── task1_action.json    # action结果
+│   └── task1.html           # HTML内容
 │
-├── myplan_parse_20241113_100100/
-│   ├── task1_task.json      # 原始 Task（复制）
-│   ├── task1_action.json    # action 结果（复制）
-│   ├── task1_parse.json     # parse 结果
-│   └── task1.html           # HTML 内容（复制）
+├── myplan_parse_20241118_100100/
+│   ├── task1_task.json      # 原始Task
+│   ├── task1_action.json    # action结果
+│   ├── task1_parse.json     # parse结果
+│   └── task1.html           # HTML内容
 │
-└── myplan_extract_20241113_100200/
-    # extract 阶段不保存文件，只读取数据用于副作用操作
+└── myplan_extract_20241118_100200/
+    # Extract阶段不保存文件
 ```
 
-**数据流转示意**：
+## 核心概念
+
+### 装饰器系统
+
+框架通过装饰器自动注册步骤函数：
 
 ```python
-# Action 阶段：生成数据
-context.task = Task(url='https://example.com')
-context['input'] = Task(url='https://example.com')
-context['content'] = '<html>...</html>'          # 用户设置
-context['result'] = {'url': '...', 'status': 200} # 用户设置
-
-# Parse 阶段：读取 action 结果
-context.task = Task(url='https://example.com')    # 原始 Task
-context['input'] = {'url': '...', 'status': 200}  # action 结果
-context['content'] = '<html>...</html>'           # HTML 内容
-context['result'] = {'title': '...', 'items': []} # 用户设置
-
-# Extract 阶段：读取 parse 结果
-context.task = Task(url='https://example.com')    # 原始 Task
-context['input'] = {'title': '...', 'items': []}  # parse 结果
-context['content'] = '<html>...</html>'           # HTML 内容
-# 通常不设置 result，直接保存到数据库
+@action()   # 注册到Action阶段
+@parse()    # 注册到Parse阶段  
+@extract()  # 注册到Extract阶段
 ```
 
-## 重要特性
+Registry会自动跟踪这些函数，Scheduler调用时从Registry获取。
 
-### 1. Spider 组件
+### 并发模型
 
-框架提供两种 Spider 实现：
+| 阶段 | 并发方式 | 原因 |
+|------|---------|------|
+| Action | 多进程 (Process) | Spider需要独立进程，避免资源冲突 |
+| Parse | 多线程 (Thread) | 纯CPU计算，线程效率更高 |
+| Extract | 多线程 (Thread) | IO密集型（数据库写入），线程即可 |
 
-**RequestSpider** - 轻量级 HTTP 请求：
+### 速率限制
+
+通过 `RATE_LIMIT` 控制任务间延迟：
+
+```python
+PLAN_CONFIG.RATE_LIMIT = 1.0  # 每秒1个任务
+PLAN_CONFIG.RATE_LIMIT = 0.5  # 每秒2个任务
+PLAN_CONFIG.RATE_LIMIT = None # 无限制
+```
+
+### Spider 说明
+
+#### RequestSpider - HTTP请求爬虫
+
+适用场景：静态页面、API接口
+
 ```python
 from auto_spider.components import RequestSpider
 
 def initial_spider():
-    return RequestSpider()
+    return RequestSpider(
+        timeout=10,        # 请求超时（秒）
+        verify_ssl=True    # 验证SSL证书
+    )
+
+# 在action中使用
+@action()
+def fetch_page(context: Context):
+    # do_url: 发起HTTP请求
+    response = context.spider.do_url(
+        url='https://example.com',
+        http_method='GET',     # GET/POST/PUT/DELETE
+        retry=3,               # 失败重试3次
+        timeout=15,            # 覆盖默认超时
+        params={'page': 1}     # URL参数
+    )
+    
+    content = response.text          # HTML内容
+    status = response.status_code    # HTTP状态码
+    
+    # get_driver: 获取requests.Session对象
+    session = context.spider.get_driver()
+    session.cookies.get('token')     # 操作cookies
 ```
 
-**PlaywrightSpider** - 浏览器自动化：
+#### PlaywrightSpider - 浏览器自动化
+
+适用场景：JS渲染页面、需要交互的动态页面
+
 ```python
 from auto_spider.components import PlaywrightSpider
 
 def initial_spider():
-    return PlaywrightSpider(headless=True)
+    return PlaywrightSpider(
+        headless=True,         # 无头模式
+        browser_type='chromium', # chromium/firefox/webkit
+        timeout=30000          # 超时（毫秒）
+    )
+
+# 在action中使用
+@action()
+def fetch_page(context: Context):
+    # do_url: 打开页面
+    content = context.spider.do_url(
+        url='https://example.com',
+        wait_until='load'  # load/domcontentloaded/networkidle
+    )
+    
+    # get_driver: 获取playwright.Page对象
+    page = context.spider.get_driver()
+    
+    # 使用page进行复杂操作
+    page.click('button#submit')           # 点击按钮
+    page.fill('input[name="q"]', 'test') # 填写表单
+    page.wait_for_selector('.result')     # 等待元素
+    page.screenshot(path='page.png')      # 截图
 ```
 
-### 2. 任务定义
+> do_url 用于访问页面，RequestSpider返回Response对象，PlaywrightSpider返回HTML字符串
+>
+> get_driver 用于高级操作，获取底层驱动对象（Session或Page）
 
-使用 `Task` 定义爬取任务：
+### 工具函数
 
-```python
-from auto_spider import Task
+#### XPath提取
 
-def initial_task():
-    return [
-        Task(url='https://example.com/page1'),
-        Task(url='https://example.com/page2'),
-        Task(url='https://example.com/page3'),
-    ]
-```
-
-### 3. 并发控制
-
-```python
-def initial_plan():
-    return {
-        'task_delay': 2,  # action 阶段任务间延迟（秒）
-        'db': db,         # 自定义资源
-    }
-```
-
-**并发说明**：
-- **Action 阶段**：多进程 + Spider，支持 `task_delay` 延迟
-- **Parse 阶段**：多线程，无延迟
-- **Extract 阶段**：多线程，无延迟
-
-### 4. CLI 命令
-
-```bash
-# 生成项目模板
-python -m auto_spider generate myplan
-
-# 直接运行指定阶段（无需修改文件）
-python -m auto_spider run plan_myplan.py fetch_page -s action
-python -m auto_spider run plan_myplan.py parse_data -s parse
-python -m auto_spider run plan_myplan.py save_data -s extract
-
-# 指定 worker 数量
-python -m auto_spider run plan_myplan.py fetch_page -w 8
-```
-
-### 5. 工具函数
-
-**XPath 提取**：
 ```python
 from auto_spider.tools.xpath import xpath_extract
 
@@ -266,61 +410,121 @@ titles = xpath_extract(html, '//h1/text()')
 links = xpath_extract(html, '//a/@href')
 ```
 
-**去重检查**：
-```python
-from auto_spider.tools.dedup import create_duplicate_checker
+#### 任务去重
 
+去重机制：基于Task对象的hash值检查整个Task（所有字段）
+
+```python
+from auto_spider.tools.dedup import create_duplicate_checker, is_duplicate
+from auto_spider import Task
+
+# 创建去重器（内存模式）
 checker = create_duplicate_checker()
-if not checker(task):
-    # 处理任务
-    pass
+
+# 或持久化到文件（跨进程共享）
+checker = create_duplicate_checker('seen_tasks.json')
+
+# 检查去重
+task1 = Task(url='https://example.com/page1')
+is_duplicate(checker, task1)  # False （第一次）
+is_duplicate(checker, task1)  # True  （重复）
+
+# 实际使用
+for url in collected_urls:
+    new_task = Task(url=url)
+    if not is_duplicate(checker, new_task):
+        context.tasks.append(new_task)
+```
+
+> 检查范围：Task的所有字段，不同字段组合会被视为不同Task
+
+自定义去重逻辑：
+
+```python
+# 方法1：只根据url去重
+# 保证Task只包含url字段
+task = Task(url='https://example.com')  # 只设置url
+
+# 方法2：自定义去重键
+# 使用特殊字段作为去重标识
+task = Task(dedup_key='page1', url='https://example.com', extra='data')
+# 只有dedup_key不同才不重复
+
+# 方法3：手动管理去重集合
+seen_urls = set()
+for url in collected_urls:
+    if url not in seen_urls:
+        seen_urls.add(url)
+        context.tasks.append(Task(url=url))
 ```
 
 ## 最佳实践
 
-### 1. 阶段独立性
+### 阶段独立性
 
-每个阶段应该独立运行，不依赖其他阶段：
+每个阶段通过Context读取数据：
 
 ```python
-# ✅ 好的做法：从 context 读取
 action_result = context.get('input', {})
-
-# ❌ 不好的做法：直接导入其他阶段函数
-from steps_myplan.action import fetch_page
 ```
 
-### 2. 数据完整性
+### 保持简单
 
-每个阶段保存完整的数据链条，便于查看和回溯：
-
-```bash
-# 查看 action 阶段结果
-cat output/myplan_action_*/task1_action.json
-
-# 查看 parse 阶段结果（包含 action 数据）
-cat output/myplan_parse_*/task1_parse.json
-```
-
-### 3. 简单直观
-
-遵循 KISS 原则，保持代码简单：
+遵循KISS原则，用最简单的代码实现功能：
 
 ```python
-# ✅ 简单直接
 @parse()
 def parse_data(context: Context):
     content = context.get('content', '')
     data = extract_data(content)
     context['result'] = data
-    return data
+```
 
-# ❌ 过度设计
-@parse()
-def parse_data(context: Context):
-    validator = DataValidator()
-    processor = DataProcessor()
-    # 过多的抽象和验证...
+### 数据追溯
+
+每个阶段的输出目录包含完整数据链：
+
+```bash
+# 查看Action结果
+cat output/myplan_action_*/task1_action.json
+
+# 查看Parse结果（包含action数据）
+cat output/myplan_parse_*/task1_parse.json
+```
+
+## 架构说明
+
+框架核心模块：
+
+- registry.py - 装饰器注册中心，管理所有步骤函数
+- scheduler.py - 任务调度器，分发任务到Worker
+- worker.py - 工作单元，执行具体步骤函数
+- stage.py - 阶段管理，处理数据加载和保存
+- Context - 数据传递载体，在阶段间传递数据
+
+执行流程：装饰器注册 → Scheduler分发 → Worker执行 → Stage保存
+
+## 配置说明
+
+### PlanConfig 配置项
+
+```python
+PLAN_CONFIG = PlanConfig()
+
+# 计划名称（用于输出目录命名）
+PLAN_CONFIG.PLAN_NAME = 'myplan'
+
+# Worker数量（并发执行任务的进程/线程数）
+PLAN_CONFIG.MAX_WORKERS = 4  # 默认4
+
+# 速率限制（任务间延迟秒数）
+PLAN_CONFIG.RATE_LIMIT = 1.0  # 1.0 = 每秒1个任务
+PLAN_CONFIG.RATE_LIMIT = 0.5  # 0.5 = 每秒2个任务
+PLAN_CONFIG.RATE_LIMIT = None  # None = 无限制
+
+# 自定义输出目录
+PLAN_CONFIG.OUTPUT_DIR = None  # None = 自动创建（推荐）
+PLAN_CONFIG.OUTPUT_DIR = './data/output'  # 指定目录
 ```
 
 ## License

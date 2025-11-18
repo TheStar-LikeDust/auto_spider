@@ -19,7 +19,7 @@ SHUTDOWN_SIGNAL = '__SHUTDOWN__'
 RELOAD_SIGNAL = '__RELOAD__'
 
 
-def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spider_factory, initial_factory, output_folder, stage, reload_event=None):
+def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spider_factory, initial_factory, plan_name, stage, reload_event=None, config=None):
     """
     Worker function that fetches tasks from queue until receives shutdown signal.
     
@@ -31,9 +31,10 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
         steps: List of step function names
         spider_factory: Spider factory function (None for parse/extract)
         initial_factory: Plan factory function
-        output_folder: Output directory path
+        plan_name: Plan name for storage
         stage: Stage name ('action', 'parse', 'extract')
         reload_event: Optional event to signal module reload (for daemon mode)
+        config: PlanConfig instance
     """
     # preparation phase: initialize spider and resources
     spider = None
@@ -106,7 +107,7 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
             # create context with original task
             # context.task is always the original Task in all stages
             original_task = task.get('task', task) if isinstance(task, dict) else task
-            context = Context(spider=spider, task=original_task, initial=initial)
+            context = Context(spider=spider, task=original_task, initial=initial, config=config)
             
             # setup context keys based on stage (unified logic in stage.py)
             setup_context_for_stage(stage, context, task)
@@ -115,8 +116,8 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
             execute_steps(step_funcs, context)
             
             # save result (only for action and parse stages)
-            if output_folder:
-                save_stage_result(stage, context, output_folder, task_name)
+            if plan_name and stage in ('action', 'parse'):
+                save_stage_result(stage, context, plan_name, task_name)
             
             # add collected tasks to queue
             if context.tasks:
@@ -129,6 +130,11 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
             
         except Exception as e:
             _LOGGER.error(f"[Worker-{worker_id}] Task failed: {task_name}, error: {e}")
+            
+            # save failed task (only for action stage)
+            if stage == 'action' and plan_name:
+                from ..storage import save_failed_task
+                save_failed_task(task_name, original_task, str(e), stage, worker_id)
         finally:
             # mark task as done
             task_queue.task_done()

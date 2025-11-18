@@ -32,7 +32,6 @@ from typing import Callable, List, Optional
 from multiprocessing import Process, JoinableQueue, Barrier
 from threading import Thread, Barrier as ThreadBarrier
 from queue import Queue
-from ..storage import create_stage_dir
 from .stage import get_tasks_for_stage
 from ..logger import build_logger
 
@@ -155,11 +154,12 @@ def start_workers(
     steps: List[str],
     spider_factory: Callable,
     initial_factory: Callable,
-    output_folder: Path,
+    plan_name: str,
     stage: str,
     max_workers: int,
     rate_limit: Optional[float] = None,
-    reload_event: Optional = None
+    reload_event: Optional = None,
+    config: Optional = None
 ):
     """
     Start workers for any stage.
@@ -172,11 +172,12 @@ def start_workers(
         steps: List of step function names
         spider_factory: Spider factory function (None for parse/extract)
         initial_factory: Plan factory function
-        output_folder: Output directory path
+        plan_name: Plan name for storage
         stage: Stage name ('action', 'parse', 'extract')
         max_workers: Number of concurrent workers
         rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
         reload_event: Optional event to signal module reload (for daemon mode)
+        config: PlanConfig instance to pass to workers
     """
     from .worker import run_worker
     
@@ -191,9 +192,10 @@ def start_workers(
         steps=steps,
         spider_factory=spider_factory,
         initial_factory=initial_factory,
-        output_folder=output_folder,
+        plan_name=plan_name,
         stage=stage,
-        reload_event=reload_event
+        reload_event=reload_event,
+        config=config
     )
 
 
@@ -227,7 +229,8 @@ def run_plan(
         actions: List[str] = None,
         parses: List[str] = None,
         extracts: List[str] = None,
-        max_workers: int = DEFAULT_MAX_WORKERS,
+        config = None,
+        max_workers: int = None,
         rate_limit: float = None,
         plan_name: str = None,
         output_dir: str = None
@@ -250,26 +253,30 @@ def run_plan(
         actions: Action step names (crawl data with spider)
         parses: Parse step names (parse HTML from action results)
         extracts: Extract step names (save data from action and parse results)
-        max_workers: Worker pool size (default: 4)
-        rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
-        plan_name: Plan name for output directory
-        output_dir: Custom output directory
+        config: PlanConfig instance (recommended, overrides individual params)
+        max_workers: Worker pool size (default: 4, overridden by config)
+        rate_limit: Delay between tasks in seconds (None = no limit, overridden by config)
+        plan_name: Plan name for output directory (overridden by config)
+        output_dir: Custom output directory (overridden by config)
         
     Example:
-        # Action only: crawl data
+        # Using config object (recommended)
+        PLAN_CONFIG = PlanConfig()
+        PLAN_CONFIG.PLAN_NAME = 'myplan'
+        PLAN_CONFIG.MAX_WORKERS = 2
+        PLAN_CONFIG.RATE_LIMIT = 1.0
+        
         run_plan(initial_spider, initial_task, initial_plan, 
-                 actions=['fetch_page'], plan_name='plan1')
+                 actions=['fetch_page'], config=PLAN_CONFIG)
         
-        # Parse only: parse existing action results
-        run_plan(initial_task=initial_task, initial_plan=initial_plan,
-                 parses=['parse_html'], plan_name='plan1')
+        # Legacy: individual params
+        run_plan(initial_spider, initial_task, initial_plan, 
+                 actions=['fetch_page'], plan_name='plan1', max_workers=2)
         
-        # Full pipeline: action → parse → extract
+        # Full pipeline
         run_plan(initial_spider, initial_task, initial_plan,
-                 actions=['fetch_page'],
-                 parses=['parse_html'],
-                 extracts=['save_to_db'],
-                 plan_name='plan1')
+                 actions=['fetch_page'], parses=['parse_html'],
+                 extracts=['save_to_db'], config=PLAN_CONFIG)
     """
     if not initial_task or not initial_plan:
         raise ValueError("initial_task and initial_plan are required")
@@ -278,26 +285,46 @@ def run_plan(
     if actions and not initial_spider:
         raise ValueError("initial_spider is required for action stage")
 
+    # extract config values (config takes precedence)
+    if config:
+        _plan_name = config.PLAN_NAME if plan_name is None else plan_name
+        _max_workers = config.MAX_WORKERS if max_workers is None else max_workers
+        _rate_limit = config.RATE_LIMIT if rate_limit is None else rate_limit
+        _output_dir = config.OUTPUT_DIR if output_dir is None else output_dir
+    else:
+        _plan_name = plan_name
+        _max_workers = max_workers if max_workers is not None else DEFAULT_MAX_WORKERS
+        _rate_limit = rate_limit
+        _output_dir = output_dir
+    
+    # configure storage
+    from ..storage import configure, initial_storage as init_storage
+    
+    if config:
+        configure(config)
+    elif _output_dir:
+        configure(base_dir=_output_dir)
+
     # execute action stage
     if actions:
         tasks = get_tasks_for_stage('action', initial_task=initial_task)
-        output_path = Path(output_dir) if output_dir else create_stage_dir(plan_name, 'action')
-        log_stage_start('action', tasks, max_workers, actions, output_path)
-        start_workers(tasks, actions, initial_spider, initial_plan, output_path, 'action', max_workers, rate_limit=rate_limit)
+        output_path = init_storage('action')
+        log_stage_start('action', tasks, _max_workers, actions, output_path)
+        start_workers(tasks, actions, initial_spider, initial_plan, _plan_name, 'action', _max_workers, rate_limit=_rate_limit, config=config)
 
     # execute parse stage
     if parses:
-        tasks = get_tasks_for_stage('parse', plan_name=plan_name)
-        output_path = Path(output_dir) if output_dir else create_stage_dir(plan_name, 'parse')
-        log_stage_start('parse', tasks, max_workers, parses, output_path)
-        start_workers(tasks, parses, None, initial_plan, output_path, 'parse', max_workers, rate_limit=rate_limit)
+        tasks = get_tasks_for_stage('parse', plan_name=_plan_name)
+        output_path = init_storage('parse')
+        log_stage_start('parse', tasks, _max_workers, parses, output_path)
+        start_workers(tasks, parses, None, initial_plan, _plan_name, 'parse', _max_workers, rate_limit=_rate_limit, config=config)
 
-    # execute extract stage (no output directory needed)
+    # execute extract stage (no storage needed)
     if extracts:
-        tasks = get_tasks_for_stage('extract', plan_name=plan_name)
+        tasks = get_tasks_for_stage('extract', plan_name=_plan_name)
         output_path = None
-        log_stage_start('extract', tasks, max_workers, extracts, output_path)
-        start_workers(tasks, extracts, None, initial_plan, output_path, 'extract', max_workers, rate_limit=rate_limit)
+        log_stage_start('extract', tasks, _max_workers, extracts, output_path)
+        start_workers(tasks, extracts, None, initial_plan, _plan_name, 'extract', _max_workers, rate_limit=_rate_limit, config=config)
 
     # TODO: Worker status checking
 
@@ -306,8 +333,9 @@ def run_plan_from_file(
         plan_file: str,
         stage: str = 'action',
         step_names: List[str] = None,
-        max_workers: int = DEFAULT_MAX_WORKERS,
-        rate_limit: float = None
+        max_workers: int = None,
+        rate_limit: float = None,
+        config = None
 ):
     """
     Wrapper for run_plan that loads plan from template file.
@@ -318,22 +346,27 @@ def run_plan_from_file(
     - initial_spider() (for action stage)
     - initial_task() (required)
     - initial_plan() (required)
-    - Optional: ACTION_LIST, PARSE_LIST, EXTRACT_LIST
+    - Optional: PLAN_CONFIG (PlanConfig instance)
+    - Optional: STAGES dict or ACTION_LIST, PARSE_LIST, EXTRACT_LIST
     
     Args:
         plan_file: Path to plan Python file
         stage: Stage to run ('action', 'parse', 'extract')
         step_names: Step names to execute (auto-reads from module if None)
-        max_workers: Worker pool size (default: 4)
-        rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
+        max_workers: Worker pool size (overrides config)
+        rate_limit: Delay between tasks (overrides config)
+        config: PlanConfig instance (overrides module config)
         
     Example:
-        # Action stage
-        run_plan_from_file('plan_example.py', stage='action', 
-                          step_names=['fetch_page'], max_workers=4)
-        
-        # Auto-read from ACTION_LIST in module
+        # Using module's config
         run_plan_from_file('plan_example.py', stage='action')
+        
+        # Override with custom config
+        my_config = PlanConfig(plan_name='custom', max_workers=8)
+        run_plan_from_file('plan_example.py', stage='action', config=my_config)
+        
+        # Override individual params
+        run_plan_from_file('plan_example.py', stage='action', max_workers=4)
     """
     plan_path = Path(plan_file).resolve()
 
@@ -360,22 +393,35 @@ def run_plan_from_file(
     if stage == 'action' and not initial_spider:
         raise ValueError("Plan file must define initial_spider for action stage")
 
+    # get config from module or use provided config
+    if config is None:
+        # try to load PLAN_CONFIG from module
+        module_config = getattr(module, 'PLAN_CONFIG', None)
+        if module_config:
+            config = module_config
+    
     # get step names from module if not provided
     if step_names is None:
-        if stage == 'action':
-            step_names = getattr(module, 'ACTION_LIST', [])
-        elif stage == 'parse':
-            step_names = getattr(module, 'PARSE_LIST', [])
+        # try STAGES dict first
+        stages_dict = getattr(module, 'STAGES', None)
+        if stages_dict:
+            step_names = stages_dict.get(stage, [])
         else:
-            step_names = getattr(module, 'EXTRACT_LIST', [])
+            # fallback to individual lists
+            if stage == 'action':
+                step_names = getattr(module, 'ACTION_LIST', [])
+            elif stage == 'parse':
+                step_names = getattr(module, 'PARSE_LIST', [])
+            else:
+                step_names = getattr(module, 'EXTRACT_LIST', [])
 
     # prepare kwargs
     kwargs = {
         'initial_task': initial_task,
         'initial_plan': initial_plan,
+        'config': config,
         'max_workers': max_workers,
         'rate_limit': rate_limit,
-        'plan_name': plan_path.stem
     }
 
     if stage == 'action':
