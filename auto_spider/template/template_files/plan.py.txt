@@ -67,6 +67,14 @@ if __name__ == '__main__':
         config=PLAN_CONFIG
     )
     
+    # Uncomment to retry failed tasks
+    # run_plan(
+    #     initial_spider, None, initial_plan,
+    #     actions=STAGES['action'],
+    #     retry_failed=True,
+    #     config=PLAN_CONFIG
+    # )
+    
     # Uncomment to run parse stage
     # run_plan(
     #     initial_task=initial_task,

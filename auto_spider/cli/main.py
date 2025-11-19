@@ -23,7 +23,7 @@ def _wrap_cmd_generate(args):
 
 def _wrap_cmd_run(args):
     """Wrapper for cmd_run to handle argparse args."""
-    cmd_run(args.plan_file, args.steps, args.stage, args.workers)
+    cmd_run(args.plan_file, args.steps, args.stage, args.workers, args.retry_failed)
 
 
 def _wrap_daemon_start(args):
@@ -63,6 +63,9 @@ Examples:
   auto-spider run plan_myplan.py fetch_page --stage action
   auto-spider run plan_myplan.py parse_data --stage parse
   auto-spider run plan_myplan.py save_data --stage extract
+  
+  # Retry failed tasks
+  auto-spider run plan_myplan.py fetch_page --stage action --retry-failed
   
   # Or just run the plan file directly
   python plan_myplan.py
@@ -110,6 +113,11 @@ Examples:
         type=int,
         default=DEFAULT_MAX_WORKERS,
         help=f'Number of workers (default: {DEFAULT_MAX_WORKERS})'
+    )
+    parser_run.add_argument(
+        '--retry-failed',
+        action='store_true',
+        help='Retry failed tasks from previous run instead of running initial_task (action stage only)'
     )
     parser_run.set_defaults(func=_wrap_cmd_run)
     

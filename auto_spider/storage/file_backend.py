@@ -129,20 +129,24 @@ def save_failed_task(task_name: str, task: dict, error: str, stage: str = 'actio
         stage: Stage name (default 'action')
         worker_id: Worker ID that failed
     """
-    if stage in _stage_dirs:
-        output_dir = _stage_dirs[stage]
-    else:
-        output_dir = _find_latest_stage_dir(stage)
-    
-    failed_data = {
-        'task': task,
-        'error': error,
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-    if worker_id is not None:
-        failed_data['worker_id'] = worker_id
-    
-    _save_file(output_dir, f'{task_name}_failed.json', failed_data, is_json=True)
+    try:
+        if stage in _stage_dirs:
+            output_dir = _stage_dirs[stage]
+        else:
+            output_dir = _find_latest_stage_dir(stage)
+        
+        failed_data = {
+            'task': task,
+            'error': error,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        if worker_id is not None:
+            failed_data['worker_id'] = worker_id
+        
+        _save_file(output_dir, f'{task_name}_failed.json', failed_data, is_json=True)
+    except Exception:
+        # let it fail: if we can't save failed task, just ignore
+        pass
 
 def load_failed_tasks(stage: str = 'action') -> List[dict]:
     """

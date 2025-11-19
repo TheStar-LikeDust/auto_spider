@@ -233,7 +233,8 @@ def run_plan(
         max_workers: int = None,
         rate_limit: float = None,
         plan_name: str = None,
-        output_dir: str = None
+        output_dir: str = None,
+        retry_failed: bool = False
 ):
     """
     Run plan by executing tasks in stages.
@@ -258,6 +259,7 @@ def run_plan(
         rate_limit: Delay between tasks in seconds (None = no limit, overridden by config)
         plan_name: Plan name for output directory (overridden by config)
         output_dir: Custom output directory (overridden by config)
+        retry_failed: If True, load failed tasks from storage instead of calling initial_task (action stage only)
         
     Example:
         # Using config object (recommended)
@@ -277,9 +279,18 @@ def run_plan(
         run_plan(initial_spider, initial_task, initial_plan,
                  actions=['fetch_page'], parses=['parse_html'],
                  extracts=['save_to_db'], config=PLAN_CONFIG)
+        
+        # Retry failed tasks
+        run_plan(initial_spider, None, initial_plan,
+                 actions=['fetch_page'], retry_failed=True, config=PLAN_CONFIG)
     """
-    if not initial_task or not initial_plan:
-        raise ValueError("initial_task and initial_plan are required")
+    # validate required params
+    if not initial_plan:
+        raise ValueError("initial_plan is required")
+    
+    # initial_task is not required when retry_failed=True
+    if not initial_task and not retry_failed:
+        raise ValueError("initial_task is required (unless retry_failed=True)")
 
     # validate action stage requirements
     if actions and not initial_spider:
@@ -307,7 +318,18 @@ def run_plan(
 
     # execute action stage
     if actions:
-        tasks = get_tasks_for_stage('action', initial_task=initial_task)
+        # load tasks: from failed tasks or initial_task
+        if retry_failed:
+            from ..storage import load_failed_tasks
+            failed_tasks = load_failed_tasks('action')
+            tasks = [item['task'] for item in failed_tasks]
+            if not tasks:
+                _LOGGER.warning("No failed tasks found, skipping action stage")
+                return
+            _LOGGER.info(f"Retrying {len(tasks)} failed tasks")
+        else:
+            tasks = get_tasks_for_stage('action', initial_task=initial_task)
+        
         output_path = init_storage('action')
         log_stage_start('action', tasks, _max_workers, actions, output_path)
         start_workers(tasks, actions, initial_spider, initial_plan, _plan_name, 'action', _max_workers, rate_limit=_rate_limit, config=config)
@@ -335,7 +357,8 @@ def run_plan_from_file(
         step_names: List[str] = None,
         max_workers: int = None,
         rate_limit: float = None,
-        config = None
+        config = None,
+        retry_failed: bool = False
 ):
     """
     Wrapper for run_plan that loads plan from template file.
@@ -356,6 +379,7 @@ def run_plan_from_file(
         max_workers: Worker pool size (overrides config)
         rate_limit: Delay between tasks (overrides config)
         config: PlanConfig instance (overrides module config)
+        retry_failed: If True, retry failed tasks instead of running initial_task
         
     Example:
         # Using module's config
@@ -367,6 +391,9 @@ def run_plan_from_file(
         
         # Override individual params
         run_plan_from_file('plan_example.py', stage='action', max_workers=4)
+        
+        # Retry failed tasks
+        run_plan_from_file('plan_example.py', stage='action', retry_failed=True)
     """
     plan_path = Path(plan_file).resolve()
 
@@ -387,8 +414,13 @@ def run_plan_from_file(
     initial_task = getattr(module, 'initial_task', None)
     initial_plan = getattr(module, 'initial_plan', None)
 
-    if not initial_task or not initial_plan:
-        raise ValueError("Plan file must define: initial_task, initial_plan")
+    # validate required params
+    if not initial_plan:
+        raise ValueError("Plan file must define: initial_plan")
+    
+    # initial_task is not required when retry_failed=True
+    if not initial_task and not retry_failed:
+        raise ValueError("Plan file must define: initial_task (unless retry_failed=True)")
 
     if stage == 'action' and not initial_spider:
         raise ValueError("Plan file must define initial_spider for action stage")
@@ -422,6 +454,7 @@ def run_plan_from_file(
         'config': config,
         'max_workers': max_workers,
         'rate_limit': rate_limit,
+        'retry_failed': retry_failed,
     }
 
     if stage == 'action':
