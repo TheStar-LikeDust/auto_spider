@@ -400,13 +400,21 @@ def run_plan_from_file(
     if not plan_path.exists():
         raise FileNotFoundError(f"Plan file not found: {plan_file}")
 
-    # load module
-    spec = importlib.util.spec_from_file_location("plan_module", plan_path)
+    # add plan directory to sys.path so module can be imported
+    plan_dir = plan_path.parent
+    if str(plan_dir) not in sys.path:
+        sys.path.insert(0, str(plan_dir))
+
+    # use real module name (plan file stem)
+    # this allows subprocess to import it correctly
+    plan_module_name = plan_path.stem  # 'plan_test_e2e'
+    
+    spec = importlib.util.spec_from_file_location(plan_module_name, plan_path)
     if not spec or not spec.loader:
         raise ImportError(f"Cannot load plan file: {plan_file}")
 
     module = importlib.util.module_from_spec(spec)
-    sys.modules["plan_module"] = module
+    sys.modules[plan_module_name] = module
     spec.loader.exec_module(module)
 
     # get 3 fixed functions

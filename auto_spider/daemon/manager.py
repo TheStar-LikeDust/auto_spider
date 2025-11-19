@@ -19,7 +19,7 @@ from ..core.worker import run_worker, SHUTDOWN_SIGNAL, RELOAD_SIGNAL
 from ..core.registry import get_step, clear_all_steps, reload_tracked_modules
 from ..core.stage import get_tasks_for_stage, setup_context_for_stage, save_stage_result
 from ..step import Context, execute_steps
-from ..storage import create_stage_dir
+from ..storage import initial_storage
 from .config import ADD_PLAN, RELOAD, SHUTDOWN, DEFAULT_HOST, DEFAULT_PORT, DEFAULT_MAX_WORKERS
 from .client import encode_command, decode_command, encode_response, decode_response
 
@@ -300,7 +300,7 @@ class DaemonManager:
         
         # create output folder
         if stage in ['action', 'parse']:
-            self.output_folder = create_stage_dir(self.plan_name, stage)
+            self.output_folder = initial_storage(stage)
         
         # start workers without barriers (daemon mode doesn't need sync)
         worker_class = Process if self.worker_type == 'process' else Thread
