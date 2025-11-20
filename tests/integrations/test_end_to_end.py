@@ -56,20 +56,73 @@ def start_server(port=TEST_SERVER_PORT):
 
 
 def test_end_to_end():
+    """
+    End-to-end test workflow:
+    1. Start HTTP server
+    2. Generate plan
+    3. Modify action/parse steps
+    4. Run stages
+    5. Verify output
+    """
     print("\n" + "="*60)
     print("End-to-End Test")
     print("="*60)
     
+    # ============== Test Configuration ==============
+    
+    test_url = f"http://localhost:{TEST_SERVER_PORT}"
+    
+    # modified initial_task code
+    INITIAL_TASK_CODE = f"""def initial_task():
+    \"\"\"Create and return task list.\"\"\"
+    return [
+        Task(url='{test_url}/page1'),
+        Task(url='{test_url}/page2'),
+    ]"""
+    
+    # action step code
+    ACTION_CODE = """from auto_spider import action, Context
+
+@action()
+def fetch_page(context: Context):
+    url = context.task.get('url')
+    response = context.spider.do_url(url)
+    
+    context['content'] = response.text
+    context['result'] = {'url': url, 'status': 200}
+"""
+    
+    # parse step code
+    PARSE_CODE = """from auto_spider import parse, Context
+
+@parse()
+def parse_data(context: Context):
+    content = context.get('content', '')
+    action_result = context.get('input', {})
+    
+    has_title = 'Product Title' in content
+    has_price = 'price' in content
+    
+    context['result'] = {
+        'url': action_result.get('url'),
+        'has_title': has_title,
+        'has_price': has_price
+    }
+"""
+    
+    # plan name
+    plan_name = 'test_e2e'
+    
+    # ============== Test Execution ==============
+    
     # step 1: start server
     print("\n[1/6] Starting server...")
     server = start_server(port=TEST_SERVER_PORT)
-    test_url = f"http://localhost:{TEST_SERVER_PORT}"
     time.sleep(0.5)
     print(f"✅ Server: {test_url}")
     
     # step 2: setup test directory
     print("\n[2/6] Setup...")
-    plan_name = 'test_e2e'
     plan_dir = TEST_OUTPUT_DIR / plan_name
     
     # cleanup old test directory if exists
@@ -93,48 +146,22 @@ def test_end_to_end():
     plan_content = plan_file.read_text(encoding='utf-8')
     plan_content = plan_content.replace(
         """def initial_task():
+    \"\"\"Create and return task list.\"\"\"
     return [
         Task(url='https://example.com/page1'),
+        Task(url='https://example.com/page2'),
     ]""",
-        f"""def initial_task():
-    return [
-        Task(url='{test_url}/page1'),
-        Task(url='{test_url}/page2'),
-    ]"""
+        INITIAL_TASK_CODE
     )
     plan_file.write_text(plan_content, encoding='utf-8')
     
     # step 5: replace action.py
     action_file = steps_dir / 'action.py'
-    action_file.write_text("""from auto_spider import action, Context
-
-@action()
-def fetch_page(context: Context):
-    url = context.task.get('url')
-    response = context.spider.do_url(url)
-    
-    context['content'] = response.text
-    context['result'] = {'url': url, 'status': 200}
-""", encoding='utf-8')
+    action_file.write_text(ACTION_CODE, encoding='utf-8')
     
     # step 6: replace parse.py
     parse_file = steps_dir / 'parse.py'
-    parse_file.write_text("""from auto_spider import parse, Context
-
-@parse()
-def parse_data(context: Context):
-    content = context.get('content', '')
-    action_result = context.get('input', {})
-    
-    has_title = 'Product Title' in content
-    has_price = 'price' in content
-    
-    context['result'] = {
-        'url': action_result.get('url'),
-        'has_title': has_title,
-        'has_price': has_price
-    }
-""", encoding='utf-8')
+    parse_file.write_text(PARSE_CODE, encoding='utf-8')
     print("✅ Files configured")
     
     # step 7: run stages using subprocess (simulate real user scenario)
@@ -143,14 +170,14 @@ def parse_data(context: Context):
     # real user scenario: cd to plan directory, then run command
     print("\n--- Action Stage ---")
     result = subprocess.run(
-        ['python', '-m', 'auto_spider', 'run', plan_file.name, 'fetch_page', '-s', 'action', '-w', '2'],
+        ['python', '-m', 'auto_spider', 'run', plan_file.name, 'fetch_page', '-s', 'action'],
         cwd=plan_dir
     )
     assert result.returncode == 0, f"Action stage failed with code {result.returncode}"
     
     print("\n--- Parse Stage ---")
     result = subprocess.run(
-        ['python', '-m', 'auto_spider', 'run', plan_file.name, 'parse_data', '-s', 'parse', '-w', '2'],
+        ['python', '-m', 'auto_spider', 'run', plan_file.name, 'parse_data', '-s', 'parse'],
         cwd=plan_dir
     )
     assert result.returncode == 0, f"Parse stage failed with code {result.returncode}"
@@ -162,20 +189,26 @@ def parse_data(context: Context):
     output_dir = plan_dir / 'output'
     
     action_dirs = sorted(output_dir.glob('*_action_*'))
-    assert len(action_dirs) > 0, f"No action output found in {output_dir}"
+    assert len(action_dirs) > 0, f"No action output in {output_dir}"
     action_dir = action_dirs[-1]
     
-    with open(action_dir / 'task1_action.json') as f:
+    action_file = action_dir / 'task1_action.json'
+    assert action_file.exists(), f"Action result not found: {action_file}"
+    with open(action_file) as f:
         action_data = json.load(f)
-        assert action_data['status'] == 200
+        assert 'status' in action_data, f"Missing 'status' in action data: {action_data}"
+        assert action_data['status'] == 200, f"Expected status 200, got {action_data['status']}"
     
     parse_dirs = sorted(output_dir.glob('*_parse_*'))
-    assert len(parse_dirs) > 0, f"No parse output found in {output_dir}"
+    assert len(parse_dirs) > 0, f"No parse output in {output_dir}"
     parse_dir = parse_dirs[-1]
     
-    with open(parse_dir / 'task1_parse.json') as f:
+    parse_file = parse_dir / 'task1_parse.json'
+    assert parse_file.exists(), f"Parse result not found: {parse_file}"
+    with open(parse_file) as f:
         parse_data = json.load(f)
-        assert parse_data['has_title'] == True
+        assert 'has_title' in parse_data, f"Missing 'has_title' in parse data: {parse_data}"
+        assert parse_data['has_title'] == True, f"Expected has_title=True"
     
     print("✅ Verified")
     
