@@ -111,7 +111,7 @@ import time
 from typing import Optional, Dict, Any, List
 
 from .base_spider import Spider
-from . import cdp_tools
+from . import cdp
 
 
 class PlaywrightSpider(Spider):
@@ -197,11 +197,11 @@ class PlaywrightSpider(Spider):
         self.page.set_default_timeout(self.timeout)
 
         if self.enable_cdp:
-            self.cdp_client = cdp_tools.init_cdp_client(self.page)
+            self.cdp_client = cdp.cdp_connect_playwright(self.page)
 
     def _do_detach(self):
         """Close browser and cleanup."""
-        cdp_tools.close_cdp_client(self.cdp_client)
+        cdp.cdp_close(self.cdp_client)
         self.cdp_client = None
 
         if self.page:
@@ -240,9 +240,19 @@ class PlaywrightSpider(Spider):
         self.page.goto(url, wait_until=wait_until)
         return self.page.content()
 
-    def get_page_info(self) -> Dict[str, Any]:
+    def get_page_info(
+        self,
+        viewport: bool = True,
+        not_occluded: bool = False,
+        compute_level: bool = False
+    ) -> Dict[str, Any]:
         """
-        Get page information using native CDP methods.
+        Get page information using CDP Accessibility Tree.
+        
+        Args:
+            viewport: Only elements in viewport (default True)
+            not_occluded: Only elements not covered by others (default False)
+            compute_level: Add visibility_level 1/2/3 (default False)
 
         Returns:
             Dict with page title, URL, and actionable elements
@@ -254,7 +264,12 @@ class PlaywrightSpider(Spider):
             raise RuntimeError("CDP not enabled")
 
         start_time = time.time()
-        elements = cdp_tools.get_interactive_elements(self.cdp_client)
+        elements = cdp.get_interactive_elements(
+            self.cdp_client,
+            viewport=viewport,
+            not_occluded=not_occluded,
+            compute_level=compute_level
+        )
         processing_time = time.time() - start_time
 
         return {
@@ -262,7 +277,10 @@ class PlaywrightSpider(Spider):
             'url': self.page.url,
             'elements': elements,
             'analysis_info': {
-                'method': 'cdp_native',
+                'method': 'cdp_accessibility_tree',
+                'viewport': viewport,
+                'not_occluded': not_occluded,
+                'compute_level': compute_level,
                 'processing_time_ms': round(processing_time * 1000, 2),
                 'interactive_elements_found': len(elements)
             }
@@ -382,7 +400,7 @@ class PlaywrightSpider(Spider):
         if not self.cdp_client:
             raise RuntimeError("CDP not enabled")
         
-        return cdp_tools.capture_screenshot(self.cdp_client, format, quality)
+        return cdp.capture_screenshot(self.cdp_client, format, quality)
 
     def capture_element_screenshot(self, index: int, format: str = 'png', 
                                    quality: int = 100, padding: int = 5) -> Optional[str]:
@@ -408,10 +426,10 @@ class PlaywrightSpider(Spider):
         element = page_info['elements'][index - 1]
         
         # Use CDP to find node and capture
-        root_id = cdp_tools.get_document_root(self.cdp_client)
-        node_ids = cdp_tools.query_selector_all(self.cdp_client, root_id, element['css'])
+        root_id = cdp.cdp_get_document_root(self.cdp_client)
+        node_ids = cdp.cdp_query_selector_all(self.cdp_client, root_id, element['css'])
         
         if not node_ids:
             return None
         
-        return cdp_tools.capture_element_screenshot(self.cdp_client, node_ids[0], format, quality, padding)
+        return cdp.capture_element_screenshot(self.cdp_client, node_id=node_ids[0], format=format, quality=quality, padding=padding)

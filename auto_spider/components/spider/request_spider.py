@@ -28,8 +28,7 @@ class RequestSpider(Spider):
         spider = RequestSpider()
         spider.attach()
         
-        response = spider.do_url('https://example.com', http_method='GET')
-        html = response.text
+        html = spider.do_url('https://example.com')
         
         spider.detach()
     """
@@ -90,9 +89,9 @@ class RequestSpider(Spider):
         timeout: Optional[Union[int, float]] = None,
         auto_raise: Optional[bool] = None,
         **kwargs
-    ):
+    ) -> str:
         """
-        Universal URL request method with retry support.
+        Navigate to URL and return page content.
         
         Args:
             url: Target URL
@@ -103,7 +102,7 @@ class RequestSpider(Spider):
             **kwargs: Additional requests arguments (params, data, json, etc.)
             
         Returns:
-            Response object
+            Page content as string
         """
         timeout = timeout or self.timeout
         http_method = http_method.upper()
@@ -130,7 +129,7 @@ class RequestSpider(Spider):
                 
                 self.last_response = response
                 response.raise_for_status()
-                return response
+                return response.text
                 
             except Exception as e:
                 count += 1
@@ -139,4 +138,4 @@ class RequestSpider(Spider):
         if exception and auto_raise:
             raise exception
         
-        return response
+        return response.text if response else ''

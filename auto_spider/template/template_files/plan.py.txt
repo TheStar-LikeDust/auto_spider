@@ -5,7 +5,7 @@ Plan script with 3 fixed functions.
 """
 
 from auto_spider.core import Task, run_plan, PlanConfig
-from auto_spider.components import RequestSpider
+from auto_spider.components import PlaywrightSpider
 
 # import steps to register them
 import steps_$name  # noqa: F401
@@ -32,7 +32,7 @@ STAGES = {
 
 def initial_spider():
     """Create and return spider instance."""
-    return RequestSpider()
+    return PlaywrightSpider(headless=True, enable_cdp=True)
 
 
 def initial_task():

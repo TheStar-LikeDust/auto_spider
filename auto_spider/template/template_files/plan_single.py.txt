@@ -6,12 +6,12 @@ Plan script with 3 fixed functions and inline steps.
 
 from auto_spider import action, parse, extract, Context
 from auto_spider.core import Task, run_plan, PlanConfig
-from auto_spider.components import RequestSpider
+from auto_spider.components import PlaywrightSpider
 
 
 def initial_spider():
     """Create and return spider instance."""
-    return RequestSpider()
+    return PlaywrightSpider(headless=True, enable_cdp=True)
 
 
 def initial_task():
@@ -57,29 +57,29 @@ STAGES = {
 
 @action()
 def fetch_page(context: Context):
-    """Fetch page content from task url."""
+    """Navigate to URL and get page info with interactive elements."""
     url = context.task.get('url')
     if not url:
         raise ValueError("Task must have 'url' field")
     
-    response = context.spider.do_url(url)
+    # navigate to page
+    content = context.spider.do_url(url)
+    
+    # get page info with interactive elements via CDP
+    page_info = context.spider.get_page_info()
 
     # save raw HTML to context['content']
-    context['content'] = response.text
+    context['content'] = content
     
-    # save metadata to context['result']
-    context['result'] = {
-        'url': url,
-        'status': response.status_code,
-        'length': len(response.text)
-    }
+    # save page info to context['result']
+    context['result'] = page_info
     
     # action stage saves:
     # - task1_task.json (original task from context.task)
-    # - task1_action.json (result from context['result'])
+    # - task1_action.json (page_info from context['result'])
     # - task1.html (content from context['content'])
     
-    return response.text
+    return content
 
 
 @parse()

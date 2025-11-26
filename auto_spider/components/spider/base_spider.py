@@ -97,22 +97,18 @@ class Spider(ABC):
         """Get underlying driver instance. Implement in subclass."""
         pass
     
-    def do_url(self, url: str, **kwargs) -> Any:
+    def do_url(self, url: str, **kwargs) -> str:
         """
-        Universal URL operation method.
-        
-        Optional method for spiders that work with URLs.
-        Subclasses can implement with retry, HTTP methods, auto_raise, etc.
+        Navigate to URL and return page content.
         
         Args:
             url: Target URL
             **kwargs: Implementation-specific parameters
-                     (e.g., http_method, retry, auto_raise)
             
         Returns:
-            Implementation-specific response or None
+            Page content as string
         """
-        return None
+        return ''
 
 
 # Alias for backward compatibility
