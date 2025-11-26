@@ -18,7 +18,7 @@ PLAN_CONFIG = PlanConfig()
 PLAN_CONFIG.PLAN_NAME = '$name'
 PLAN_CONFIG.MAX_WORKERS = 4           # number of concurrent workers
 PLAN_CONFIG.RATE_LIMIT = None         # delay between tasks in seconds (None = no limit)
-PLAN_CONFIG.OUTPUT_DIR = None         # custom output directory (None = auto create)
+PLAN_CONFIG.OUTPUT_DIR = 'steps_$name/output'  # output in steps package
 
 # Step lists for each stage
 STAGES = {

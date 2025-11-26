@@ -311,7 +311,13 @@ def run_plan(
     # configure storage
     from ..storage import configure, initial_storage as init_storage
     
+    # default output_dir: steps_{plan_name}/output
+    if not _output_dir and _plan_name:
+        _output_dir = f"steps_{_plan_name}/output"
+    
     if config:
+        if not config.OUTPUT_DIR and _plan_name:
+            config.OUTPUT_DIR = _output_dir
         configure(config)
     elif _output_dir:
         configure(base_dir=_output_dir)
