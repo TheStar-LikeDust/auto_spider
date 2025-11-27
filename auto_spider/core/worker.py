@@ -49,6 +49,11 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
     
     step_funcs = [get_step(stage, name) for name in steps]
     
+    # setup storage for multiprocess workers
+    if config and config._stage_output_dir:
+        from ..storage import configure
+        configure(stage_dir=config._stage_output_dir, stage=stage)
+    
     _LOGGER.debug(f"[Worker-{worker_id}] Preparation completed, waiting for other workers...")
     
     # wait for all workers to complete preparation

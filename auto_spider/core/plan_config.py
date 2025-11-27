@@ -101,7 +101,19 @@ class DictAttributeMixin:
             dict.__setitem__(self, key, value)
 
 
-class PlanConfig(dict, DictAttributeMixin):
+class RuntimeConfigMixin:
+    """
+    Mixin for runtime internal variables.
+    
+    These variables are set by scheduler/worker during execution,
+    not by user. All prefixed with underscore.
+    """
+    
+    # Current stage output directory (set by scheduler, used by worker)
+    _stage_output_dir: Optional[str] = None
+
+
+class PlanConfig(dict, DictAttributeMixin, RuntimeConfigMixin):
     """
     Plan execution configuration.
     

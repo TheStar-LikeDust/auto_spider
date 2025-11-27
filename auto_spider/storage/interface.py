@@ -8,13 +8,15 @@ _backend_type = 'file'
 _backend_module = None
 
 
-def configure(config=None, backend='file', **options):
+def configure(config=None, backend='file', stage_dir=None, stage=None, **options):
     """
     Configure storage backend.
     
     Args:
         config: PlanConfig instance
         backend: Backend type ('file', 'redis', 'sqlite')
+        stage_dir: Stage directory path (for multiprocess workers)
+        stage: Stage name (for multiprocess workers)
         **options: Backend-specific options
     """
     global _backend_type, _backend_module
@@ -28,7 +30,7 @@ def configure(config=None, backend='file', **options):
     if _backend_type == 'file':
         from . import file_backend
         _backend_module = file_backend
-        file_backend.configure(config, **options)
+        file_backend.configure(config, stage_dir=stage_dir, stage=stage, **options)
     elif _backend_type == 'redis':
         # from . import redis_backend
         # _backend_module = redis_backend

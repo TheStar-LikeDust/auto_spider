@@ -9,7 +9,7 @@ _base_dir = 'output'
 _use_timestamp = True
 _stage_dirs = {}
 
-def configure(config=None, base_dir=None, use_timestamp=None):
+def configure(config=None, base_dir=None, use_timestamp=None, stage_dir=None, stage=None):
     global _base_dir, _use_timestamp
     if config is not None:
         _base_dir = getattr(config, 'OUTPUT_DIR', None) or 'output'
@@ -19,6 +19,9 @@ def configure(config=None, base_dir=None, use_timestamp=None):
             _base_dir = base_dir
         if use_timestamp is not None:
             _use_timestamp = use_timestamp
+    # for multiprocess workers: directly set stage directory
+    if stage_dir and stage:
+        _stage_dirs[stage] = Path(stage_dir)
 
 def initial_storage(stage: str) -> Path:
     base_path = Path(_base_dir)

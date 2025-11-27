@@ -50,21 +50,18 @@ steps_myplan/           # 步骤包
 
 ```python
 from auto_spider import Task, PlanConfig
-from auto_spider.components import RequestSpider  # 或 PlaywrightSpider
+from auto_spider.components import PlaywrightSpider
 
 # 1. 配置参数
 PLAN_CONFIG = PlanConfig()
 PLAN_CONFIG.PLAN_NAME = 'myplan'
+PLAN_CONFIG.OUTPUT_DIR = 'steps_myplan/output'
 PLAN_CONFIG.MAX_WORKERS = 4
 PLAN_CONFIG.RATE_LIMIT = 1.0  # 每个任务间隔1秒
 
-# 2. 初始化 Spider（仅 Action 阶段需要）
+# 2. 初始化 Spider
 def initial_spider():
-    return RequestSpider()  # 或 PlaywrightSpider(headless=True)
-
-# Spider说明：
-# RequestSpider - HTTP请求爬虫，轻量快速，适合静态页面
-# PlaywrightSpider - 浏览器自动化，支持JS渲染，适合动态页面
+    return PlaywrightSpider(headless=True)
 
 # 3. 定义任务列表
 def initial_task():
@@ -97,25 +94,25 @@ from auto_spider import action, Context, Task
 def fetch_page(context: Context):
     """下载页面"""
     url = context.task.get('url')
-    response = context.spider.do_url(url)
+    content = context.spider.do_url(url)
     
-    context['content'] = response.text
-    context['result'] = {'url': url, 'status': response.status_code}
+    context['content'] = content
+    context['result'] = {'url': url}
 
 # 增量爬取：动态添加新任务到队列
 @action()
 def fetch_list(context: Context):
     """列表页提取详情页链接"""
     url = context.task.get('url')
-    response = context.spider.do_url(url)
+    content = context.spider.do_url(url)
     
-    detail_urls = extract_links(response.text)
+    detail_urls = extract_links(content)
     
     # 添加新任务到队列
     for detail_url in detail_urls:
         context.tasks.append(Task(url=detail_url))
     
-    context['content'] = response.text
+    context['content'] = content
 ```
 
 > context['content'] 必须设置，用于传递HTML给后续阶段
@@ -279,20 +276,18 @@ Extract阶段 (多线程)
 #### 文件保存结构
 
 ```
-output/
-├── myplan_action_20241118_100000/
-│   ├── task1_task.json      # 原始Task
-│   ├── task1_action.json    # action结果
-│   └── task1.html           # HTML内容
-│
-├── myplan_parse_20241118_100100/
-│   ├── task1_task.json      # 原始Task
-│   ├── task1_action.json    # action结果
-│   ├── task1_parse.json     # parse结果
-│   └── task1.html           # HTML内容
-│
-└── myplan_extract_20241118_100200/
-    # Extract阶段不保存文件
+steps_myplan/
+└── output/
+    ├── action_20241118_100000/
+    │   ├── task1_task.json      # 原始Task
+    │   ├── task1_action.json    # action结果
+    │   └── task1.html           # HTML内容
+    │
+    └── parse_20241118_100100/
+        ├── task1_task.json      # 原始Task
+        ├── task1_action.json    # action结果
+        ├── task1_parse.json     # parse结果
+        └── task1.html           # HTML内容
 ```
 
 ## 核心概念
@@ -329,75 +324,12 @@ PLAN_CONFIG.RATE_LIMIT = None # 无限制
 
 ### Spider 说明
 
-#### RequestSpider - HTTP请求爬虫
+两种Spider的`do_url()`都返回`str`（HTML内容）。详细API请参考`cc_reference.md`。
 
-适用场景：静态页面、API接口
-
-```python
-from auto_spider.components import RequestSpider
-
-def initial_spider():
-    return RequestSpider(
-        timeout=10,        # 请求超时（秒）
-        verify_ssl=True    # 验证SSL证书
-    )
-
-# 在action中使用
-@action()
-def fetch_page(context: Context):
-    # do_url: 发起HTTP请求
-    response = context.spider.do_url(
-        url='https://example.com',
-        http_method='GET',     # GET/POST/PUT/DELETE
-        retry=3,               # 失败重试3次
-        timeout=15,            # 覆盖默认超时
-        params={'page': 1}     # URL参数
-    )
-    
-    content = response.text          # HTML内容
-    status = response.status_code    # HTTP状态码
-    
-    # get_driver: 获取requests.Session对象
-    session = context.spider.get_driver()
-    session.cookies.get('token')     # 操作cookies
-```
-
-#### PlaywrightSpider - 浏览器自动化
-
-适用场景：JS渲染页面、需要交互的动态页面
-
-```python
-from auto_spider.components import PlaywrightSpider
-
-def initial_spider():
-    return PlaywrightSpider(
-        headless=True,         # 无头模式
-        browser_type='chromium', # chromium/firefox/webkit
-        timeout=30000          # 超时（毫秒）
-    )
-
-# 在action中使用
-@action()
-def fetch_page(context: Context):
-    # do_url: 打开页面
-    content = context.spider.do_url(
-        url='https://example.com',
-        wait_until='load'  # load/domcontentloaded/networkidle
-    )
-    
-    # get_driver: 获取playwright.Page对象
-    page = context.spider.get_driver()
-    
-    # 使用page进行复杂操作
-    page.click('button#submit')           # 点击按钮
-    page.fill('input[name="q"]', 'test') # 填写表单
-    page.wait_for_selector('.result')     # 等待元素
-    page.screenshot(path='page.png')      # 截图
-```
-
-> do_url 用于访问页面，RequestSpider返回Response对象，PlaywrightSpider返回HTML字符串
->
-> get_driver 用于高级操作，获取底层驱动对象（Session或Page）
+| Spider | 适用场景 | 特点 |
+|--------|----------|------|
+| PlaywrightSpider | JS渲染页面（默认） | 浏览器自动化，支持交互 |
+| RequestSpider | 静态页面/API | 轻量快速 |
 
 ### 工具函数
 
@@ -523,9 +455,30 @@ PLAN_CONFIG.RATE_LIMIT = 0.5  # 0.5 = 每秒2个任务
 PLAN_CONFIG.RATE_LIMIT = None  # None = 无限制
 
 # 自定义输出目录
-PLAN_CONFIG.OUTPUT_DIR = None  # None = 自动创建（推荐）
-PLAN_CONFIG.OUTPUT_DIR = './data/output'  # 指定目录
+PLAN_CONFIG.OUTPUT_DIR = 'steps_myplan/output'  # 推荐放在steps包下
 ```
+
+---
+
+## TODO
+
+### 框架优化
+
+- [ ] 任务去重机制：避免重复执行已完成任务
+- [ ] 进度恢复机制：从检查点恢复执行
+- [ ] 更好的进度反馈和错误提示
+
+### 数据提取
+
+- [ ] 多模式XPath提取：fallback机制提高成功率
+- [ ] 数据质量评估：自动评估提取结果完整性
+
+### 错误处理
+
+- [ ] 详细错误日志
+- [ ] 更好的异常提示信息
+
+---
 
 ## License
 

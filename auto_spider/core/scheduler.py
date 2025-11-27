@@ -337,6 +337,8 @@ def run_plan(
             tasks = get_tasks_for_stage('action', initial_task=initial_task)
         
         output_path = init_storage('action')
+        if config:
+            config._stage_output_dir = str(output_path)
         log_stage_start('action', tasks, _max_workers, actions, output_path)
         start_workers(tasks, actions, initial_spider, initial_plan, _plan_name, 'action', _max_workers, rate_limit=_rate_limit, config=config)
 
@@ -344,6 +346,8 @@ def run_plan(
     if parses:
         tasks = get_tasks_for_stage('parse', plan_name=_plan_name)
         output_path = init_storage('parse')
+        if config:
+            config._stage_output_dir = str(output_path)
         log_stage_start('parse', tasks, _max_workers, parses, output_path)
         start_workers(tasks, parses, None, initial_plan, _plan_name, 'parse', _max_workers, rate_limit=_rate_limit, config=config)
 
