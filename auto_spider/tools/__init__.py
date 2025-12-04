@@ -8,6 +8,7 @@ Plan template generation:
 Utility modules (not auto-imported):
 - dedup: Duplicate detection (create_duplicate_checker, is_duplicate)
 - xpath: XPath parsing (xpath_extract)
+- html_cleaner: HTML cleaning (clean_html)
 
 Usage:
     from auto_spider.tools import generate_plan

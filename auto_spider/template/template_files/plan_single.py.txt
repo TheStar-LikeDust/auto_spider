@@ -38,19 +38,11 @@ def initial_plan():
 
 # ============== Configuration ==============
 
-# Create config instance
 PLAN_CONFIG = PlanConfig()
 PLAN_CONFIG.PLAN_NAME = '$name'
 PLAN_CONFIG.MAX_WORKERS = 4           # number of concurrent workers
 PLAN_CONFIG.RATE_LIMIT = None         # delay between tasks in seconds (None = no limit)
-PLAN_CONFIG.OUTPUT_DIR = 'steps_$name/output'  # output in steps package
-
-# Step lists for each stage
-STAGES = {
-    'action': ['fetch_page'],
-    'parse': ['parse_data'],
-    'extract': ['save_data'],
-}
+PLAN_CONFIG.OUTPUT_DIR = 'output'     # single file uses local output
 
 
 # ============== Steps ==============
@@ -140,33 +132,10 @@ def save_data(context: Context):
 # ============== Execution ==============
 
 if __name__ == '__main__':
-    # Run action stage only
     run_plan(
         initial_spider, initial_task, initial_plan,
-        actions=STAGES['action'],
+        actions=['fetch_page'],      # action: fetch HTML
+        # parses=['parse_data'],     # parse: extract data from HTML
+        # extracts=['save_data'],    # extract: save to database
         config=PLAN_CONFIG
     )
-    
-    # Uncomment to retry failed tasks
-    # run_plan(
-    #     initial_spider, None, initial_plan,
-    #     actions=STAGES['action'],
-    #     retry_failed=True,
-    #     config=PLAN_CONFIG
-    # )
-    
-    # Uncomment to run parse stage
-    # run_plan(
-    #     initial_task=initial_task,
-    #     initial_plan=initial_plan,
-    #     parses=STAGES['parse'],
-    #     config=PLAN_CONFIG
-    # )
-    
-    # Uncomment to run extract stage
-    # run_plan(
-    #     initial_task=initial_task,
-    #     initial_plan=initial_plan,
-    #     extracts=STAGES['extract'],
-    #     config=PLAN_CONFIG
-    # )

@@ -6,9 +6,8 @@ Single worker execution logic for all stages.
 
 from pathlib import Path
 from typing import Callable, List, Optional
-from threading import Event
 from ..step import Context, generate_task_name, execute_steps
-from .registry import get_step, clear_all_steps, reload_tracked_modules
+from .registry import get_step
 from .stage import save_stage_result, setup_context_for_stage
 from ..logger import build_logger
 
@@ -16,10 +15,9 @@ _LOGGER = build_logger('worker')
 
 # worker control signals
 SHUTDOWN_SIGNAL = '__SHUTDOWN__'
-RELOAD_SIGNAL = '__RELOAD__'
 
 
-def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spider_factory, initial_factory, plan_name, stage, reload_event=None, config=None):
+def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spider_factory, initial_factory, plan_name, stage, config=None):
     """
     Worker function that fetches tasks from queue until receives shutdown signal.
     
@@ -33,7 +31,6 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
         initial_factory: Plan factory function
         plan_name: Plan name for storage
         stage: Stage name ('action', 'parse', 'extract')
-        reload_event: Optional event to signal module reload (for daemon mode)
         config: PlanConfig instance
     """
     # preparation phase: initialize spider and resources
@@ -65,21 +62,6 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
     
     # process tasks from queue until receives shutdown signal
     while True:
-        # check if reload is needed (only in daemon mode)
-        if reload_event and reload_event.is_set():
-            _LOGGER.info(f"[Worker-{worker_id}] Reload signal detected, reloading modules...")
-            try:
-                # clear and reload all tracked modules
-                clear_all_steps()
-                reload_tracked_modules()
-                # re-get step functions
-                step_funcs = [get_step(stage, name) for name in steps]
-                _LOGGER.info(f"[Worker-{worker_id}] Modules reloaded successfully")
-            except Exception as e:
-                _LOGGER.error(f"[Worker-{worker_id}] Failed to reload modules: {e}")
-            finally:
-                reload_event.clear()
-        
         # get task from queue (blocking)
         item = task_queue.get()
         
@@ -88,19 +70,6 @@ def run_worker(worker_id, task_queue, ready_barrier, start_barrier, steps, spide
             task_queue.task_done()
             _LOGGER.debug(f"[Worker-{worker_id}] Received shutdown signal")
             break
-        
-        # check for reload signal (alternative to reload_event)
-        if item == RELOAD_SIGNAL:
-            task_queue.task_done()
-            _LOGGER.info(f"[Worker-{worker_id}] Received reload signal, reloading modules...")
-            try:
-                clear_all_steps()
-                reload_tracked_modules()
-                step_funcs = [get_step(stage, name) for name in steps]
-                _LOGGER.info(f"[Worker-{worker_id}] Modules reloaded successfully")
-            except Exception as e:
-                _LOGGER.error(f"[Worker-{worker_id}] Failed to reload modules: {e}")
-            continue
         
         task_index, task = item
         # use simple task naming: task1, task2, task3...

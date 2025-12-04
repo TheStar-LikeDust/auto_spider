@@ -158,7 +158,6 @@ def start_workers(
     stage: str,
     max_workers: int,
     rate_limit: Optional[float] = None,
-    reload_event: Optional = None,
     config: Optional = None
 ):
     """
@@ -176,7 +175,6 @@ def start_workers(
         stage: Stage name ('action', 'parse', 'extract')
         max_workers: Number of concurrent workers
         rate_limit: Delay between tasks in seconds (None = no limit, e.g., 1.0 = 1 task/sec, 0.5 = 2 tasks/sec)
-        reload_event: Optional event to signal module reload (for daemon mode)
         config: PlanConfig instance to pass to workers
     """
     from .worker import run_worker
@@ -194,7 +192,6 @@ def start_workers(
         initial_factory=initial_factory,
         plan_name=plan_name,
         stage=stage,
-        reload_event=reload_event,
         config=config
     )
 

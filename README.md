@@ -483,3 +483,10 @@ PLAN_CONFIG.OUTPUT_DIR = 'steps_myplan/output'  # 推荐放在steps包下
 ## License
 
 MIT
+
+
+# 在 Cmd 中运行以下命令
+# 注意替换里面的 `your_zhipu_api_key` 为您上一步获取到的 API Key
+setx ANTHROPIC_AUTH_TOKEN a4b11a64a5a34a0bb8fb82de85202275.oijV4XVch7tczjiO
+setx ANTHROPIC_BASE_URL https://open.bigmodel.cn/api/anthropic
+setx CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC 1
