@@ -39,7 +39,6 @@ from .scheduler import (
 
 from .worker import (
     SHUTDOWN_SIGNAL,
-    RELOAD_SIGNAL,
 )
 
 from ..storage import (
@@ -82,7 +81,6 @@ __all__ = [
     
     # worker signals
     'SHUTDOWN_SIGNAL',
-    'RELOAD_SIGNAL',
     
     # step
     'Task',
