@@ -184,4 +184,7 @@ ref/
 # Project documentation
 claude.md
 
+.claude
+
+# dev run output
 output*
