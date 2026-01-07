@@ -182,6 +182,7 @@ playground*
 ref/
 
 # Project documentation
+CLAUDE.md
 claude.md
 
 .claude
