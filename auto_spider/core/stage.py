@@ -6,8 +6,11 @@ Get tasks for stages and save stage results.
 
 from pathlib import Path
 from typing import Callable, List
-from ..storage import load_action_result, load_parse_result, save_action_result, save_parse_result
+from ..storage import load_action_result, load_parse_result, save_action_result, save_parse_result, load_failed_tasks
 from ..step import Context
+from ..tools.logger import build_logger
+
+_LOGGER = build_logger('stage')
 
 
 def get_tasks_for_stage(stage: str, plan_name: str = None, initial_task: Callable = None) -> List:
@@ -137,3 +140,63 @@ def save_stage_result(stage: str, context: Context, plan_name: str, task_name: s
     elif stage == 'extract':
         # extract stage: read only, no save
         pass
+
+
+def prepare_action_tasks(initial_task: Callable, retry_failed: bool = False) -> List:
+    """
+    Prepare tasks for action stage.
+    
+    Args:
+        initial_task: Task factory function (required unless retry_failed=True)
+        retry_failed: Retry failed tasks
+        
+    Returns:
+        List of tasks
+    """
+    if retry_failed:
+        failed_tasks = load_failed_tasks('action')
+        tasks = [item['task'] for item in failed_tasks]
+        if not tasks:
+            _LOGGER.info("No failed tasks found, action stage will be skipped")
+            return []
+        _LOGGER.info(f"Retrying {len(tasks)} failed tasks")
+        return tasks
+    else:
+        if not initial_task:
+            raise ValueError("initial_task is required for action stage (unless retry_failed=True)")
+        tasks = initial_task()
+        if not tasks:
+            _LOGGER.info("No tasks from initial_task, action stage will be skipped")
+        return tasks
+
+
+def prepare_parse_tasks(plan_name: str) -> List:
+    """
+    Prepare tasks for parse stage.
+    
+    Args:
+        plan_name: Plan name for loading results
+        
+    Returns:
+        List of tasks
+    """
+    tasks = get_tasks_for_stage('parse', plan_name=plan_name)
+    if not tasks:
+        _LOGGER.info("No tasks from parse stage, parse stage will be skipped")
+    return tasks
+
+
+def prepare_extract_tasks(plan_name: str) -> List:
+    """
+    Prepare tasks for extract stage.
+    
+    Args:
+        plan_name: Plan name for loading results
+        
+    Returns:
+        List of tasks
+    """
+    tasks = get_tasks_for_stage('extract', plan_name=plan_name)
+    if not tasks:
+        _LOGGER.info("No tasks from extract stage, extract stage will be skipped")
+    return tasks

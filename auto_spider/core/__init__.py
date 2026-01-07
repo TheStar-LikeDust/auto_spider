@@ -22,9 +22,8 @@ from .registry import (
 )
 
 from ..step import Task, generate_task_name, execute_steps
-from .scheduler import (
+from .plan_scheduler import (
     run_plan,
-    run_plan_from_file,
     DEFAULT_MAX_WORKERS,
 )
 
@@ -33,12 +32,23 @@ from .stage import (
     save_stage_result,
 )
 
-from .scheduler import (
+from .plan_scheduler import (
     start_workers,
 )
 
-from .worker import (
+from .plan_worker import (
     SHUTDOWN_SIGNAL,
+    run_worker,
+    dispatch_workers,
+)
+
+from .operations import (
+    setup_storage,
+    create_stage_storage,
+    initialize_spider,
+    cleanup_spider,
+    initialize_resources,
+    setup_worker_storage,
 )
 
 from ..storage import (
@@ -79,13 +89,22 @@ __all__ = [
     'reload_tracked_modules',
     'get_tracked_modules',
     
-    # worker signals
+    # worker
     'SHUTDOWN_SIGNAL',
+    'run_worker',
+    'dispatch_workers',
+    
+    # operations
+    'setup_storage',
+    'create_stage_storage',
+    'initialize_spider',
+    'cleanup_spider',
+    'initialize_resources',
+    'setup_worker_storage',
     
     # step
     'Task',
     'run_plan',
-    'run_plan_from_file',
     'get_tasks_for_stage',
     'save_stage_result',
     'DEFAULT_MAX_WORKERS',

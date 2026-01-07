@@ -28,9 +28,9 @@ def configure(config=None, backend='file', stage_dir=None, stage=None, **options
     
     # Import and configure backend
     if _backend_type == 'file':
-        from . import file_backend
-        _backend_module = file_backend
-        file_backend.configure(config, stage_dir=stage_dir, stage=stage, **options)
+        from . import _file_storage_backend
+        _backend_module = _file_storage_backend
+        _file_storage_backend.configure(config, stage_dir=stage_dir, stage=stage, **options)
     elif _backend_type == 'redis':
         # from . import redis_backend
         # _backend_module = redis_backend

@@ -6,7 +6,7 @@ Main entry point for CLI tool.
 
 import argparse
 from .commands import cmd_generate, cmd_run
-from ..core.scheduler import DEFAULT_MAX_WORKERS
+from ..core.plan_scheduler import DEFAULT_MAX_WORKERS
 
 
 def _wrap_cmd_generate(args):

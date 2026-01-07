@@ -78,7 +78,10 @@ def fetch_page(context: Context):
     workers = context.config.MAX_WORKERS
 """
 
-from typing import Optional
+import importlib.util
+import sys
+from pathlib import Path
+from typing import Optional, Callable, List, Tuple, Dict, Any
 
 
 class DictAttributeMixin:
@@ -163,3 +166,67 @@ class PlanConfig(dict, DictAttributeMixin, RuntimeConfigMixin):
 
 # Default configuration instance
 DEFAULT_CONFIG = PlanConfig()
+
+
+def load_plan_module(plan_file: str) -> Dict[str, Any]:
+    """
+    Load plan module and extract all configuration parameters.
+    
+    Args:
+        plan_file: Path to plan file
+        
+    Returns:
+        Dict with keys:
+            - initial_spider: Spider factory function
+            - initial_task: Task factory function
+            - initial_plan: Plan factory function
+            - actions: List of action step names
+            - parses: List of parse step names
+            - extracts: List of extract step names
+            - config: PlanConfig instance
+    """
+    plan_path = Path(plan_file).resolve()
+    if not plan_path.exists():
+        raise FileNotFoundError(f"Plan file not found: {plan_file}")
+
+    plan_dir = plan_path.parent
+    if str(plan_dir) not in sys.path:
+        sys.path.insert(0, str(plan_dir))
+
+    plan_module_name = plan_path.stem
+    spec = importlib.util.spec_from_file_location(plan_module_name, plan_path)
+    if not spec or not spec.loader:
+        raise ImportError(f"Cannot load plan file: {plan_file}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[plan_module_name] = module
+    spec.loader.exec_module(module)
+
+    # extract factories
+    initial_spider = getattr(module, 'initial_spider', None)
+    initial_task = getattr(module, 'initial_task', None)
+    initial_plan = getattr(module, 'initial_plan', None)
+    
+    # extract plan_config
+    plan_config = getattr(module, 'PLAN_CONFIG', None)
+    
+    # extract step names
+    stages_dict = getattr(module, 'STAGES', None)
+    if stages_dict:
+        actions = stages_dict.get('action', [])
+        parses = stages_dict.get('parse', [])
+        extracts = stages_dict.get('extract', [])
+    else:
+        actions = getattr(module, 'ACTION_LIST', [])
+        parses = getattr(module, 'PARSE_LIST', [])
+        extracts = getattr(module, 'EXTRACT_LIST', [])
+    
+    return {
+        'initial_spider': initial_spider,
+        'initial_task': initial_task,
+        'initial_plan': initial_plan,
+        'actions': actions,
+        'parses': parses,
+        'extracts': extracts,
+        'plan_config': plan_config
+    }

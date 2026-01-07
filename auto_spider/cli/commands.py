@@ -5,7 +5,7 @@ Business logic for CLI commands.
 """
 
 from ..template import generate_plan
-from ..core.scheduler import run_plan_from_file, DEFAULT_MAX_WORKERS
+from ..core.plan_scheduler import run_plan, DEFAULT_MAX_WORKERS
 
 
 def cmd_generate(name: str, description: str = None, single_file: bool = False):
@@ -65,6 +65,15 @@ def cmd_run(plan_file: str, steps: str, stage: str = None, workers: int = DEFAUL
     if retry_failed:
         print(f"   Mode: Retry failed tasks")
     
-    run_plan_from_file(plan_file, stage=stage, step_names=step_list, max_workers=workers, retry_failed=retry_failed)
+    # build stage parameters
+    stage_params = {}
+    if stage == 'action':
+        stage_params['actions'] = step_list
+    elif stage == 'parse':
+        stage_params['parses'] = step_list
+    else:
+        stage_params['extracts'] = step_list
+    
+    run_plan(plan_file=plan_file, max_workers=workers, retry_failed=retry_failed, **stage_params)
     
     print(f"\nPlan execution completed")

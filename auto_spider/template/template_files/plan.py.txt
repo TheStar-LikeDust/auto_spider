@@ -54,8 +54,8 @@ def initial_plan():
 if __name__ == '__main__':
     run_plan(
         initial_spider, initial_task, initial_plan,
+        plan_config=PLAN_CONFIG,
         actions=['fetch_page'],      # action: fetch HTML
         # parses=['parse_data'],     # parse: extract data from HTML
         # extracts=['save_data'],    # extract: save to database
-        config=PLAN_CONFIG
     )

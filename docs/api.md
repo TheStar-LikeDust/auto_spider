@@ -1,22 +1,27 @@
-# Auto Spider 基础参考
+# API 参考
 
 ## CLI 命令
 
-| 命令 | 说明 |
-|------|------|
-| `python -m auto_spider generate <name>` | 生成项目模板 |
-| `python -m auto_spider generate <name> --single-file` | 生成单文件模板 |
-| `python -m auto_spider run <file> <step> -s <stage>` | 运行指定阶段 |
-| `python -m auto_spider run <file> <step> -w <num>` | 指定worker数量 |
-| `python -m auto_spider run <file> <step> --retry-failed` | 重试失败任务 |
+```bash
+# 生成项目模板
+python -m auto_spider generate <name>
+python -m auto_spider generate <name> --single-file
 
-**stage 参数**：`action` / `parse` / `extract`，不指定时自动检测（步骤名含parse→parse，含extract或save→extract，其他→action）
+# 运行计划
+python -m auto_spider run <file> <step> -s <stage>
+python -m auto_spider run <file> <step> -w <num>
+python -m auto_spider run <file> <step> --retry-failed
+```
 
----
+**stage 参数**：`action` / `parse` / `extract`
 
-## PlanConfig 配置
+**自动检测**：不指定 `-s` 时，步骤名含 parse→parse，含 extract 或 save→extract，其他→action
+
+## PlanConfig
 
 ```python
+from auto_spider import PlanConfig
+
 PLAN_CONFIG = PlanConfig()
 PLAN_CONFIG.PLAN_NAME = 'myplan'           # 计划名称，用于输出目录
 PLAN_CONFIG.OUTPUT_DIR = 'output'          # 输出目录路径
@@ -25,17 +30,15 @@ PLAN_CONFIG.RATE_LIMIT = 1.0               # 任务间隔秒数，None为无限�
 PLAN_CONFIG.STORAGE_TIMESTAMP = True       # 目录名是否带时间戳
 ```
 
----
-
-## Context API
+## Context
 
 ### 属性
 
 | 属性 | 阶段 | 说明 |
 |------|------|------|
-| `context.task` | 全部 | 原始Task字典，永不改变 |
+| `context.task` | 全部 | 原始Task字典 |
 | `context.spider` | Action | Spider实例 |
-| `context.tasks` | Action | 增量任务列表，用于动态添加新任务 |
+| `context.tasks` | Action | 增量任务列表 |
 | `context.initial` | 全部 | `initial_plan()` 返回的资源字典 |
 
 ### 键值
@@ -46,8 +49,6 @@ PLAN_CONFIG.STORAGE_TIMESTAMP = True       # 目录名是否带时间戳
 | `context['result']` | 写 | 当前阶段输出，自动保存为json |
 | `context.get('input')` | 读 | 上一阶段的result |
 
----
-
 ## 装饰器
 
 ```python
@@ -55,18 +56,27 @@ from auto_spider import action, parse, extract, Context
 
 @action()
 def fetch_page(context: Context):
-    # Action阶段：下载页面
+    # Action阶段
 
 @parse()
 def parse_data(context: Context):
-    # Parse阶段：解析数据
+    # Parse阶段
 
 @extract()
 def save_data(context: Context):
-    # Extract阶段：保存数据
+    # Extract阶段
 ```
 
----
+## Task
+
+Task本质是dict，可传入任意参数：
+
+```python
+from auto_spider import Task
+
+task = Task(url='https://example.com', page_type='list', retry=3)
+# 在action中通过 context.task.get('url') 获取
+```
 
 ## Spider
 
@@ -80,6 +90,8 @@ from auto_spider.components import PlaywrightSpider
 spider = PlaywrightSpider(headless=True, enable_cdp=True, timeout=30)
 ```
 
+**方法**：
+
 | 方法 | 说明 |
 |------|------|
 | `do_url(url)` | 访问URL，返回HTML字符串 |
@@ -92,6 +104,7 @@ spider = PlaywrightSpider(headless=True, enable_cdp=True, timeout=30)
 - `page.click(selector)` - 点击元素
 - `page.fill(selector, text)` - 填写输入框
 - `page.wait_for_selector(selector)` - 等待元素出现
+- `page.wait_for_url(pattern)` - 等待URL匹配
 - `page.screenshot(path='x.png')` - 截图
 
 ### RequestSpider
@@ -104,16 +117,16 @@ from auto_spider.components import RequestSpider
 spider = RequestSpider(timeout=10)
 ```
 
+**方法**：
+
 | 方法 | 说明 |
 |------|------|
 | `do_url(url, retry=1)` | 发起HTTP请求，返回HTML字符串 |
 | `get_driver()` | 获取 requests.Session 对象 |
 
----
-
 ## 工具函数
 
-### XPath提取
+### XPath 提取
 
 ```python
 from auto_spider.tools.xpath import xpath_extract
@@ -122,7 +135,7 @@ titles = xpath_extract(html, '//h1/text()')
 links = xpath_extract(html, '//a/@href')
 ```
 
-### HTML清洗
+### HTML 清洗
 
 ```python
 from auto_spider.tools.html_cleaner import clean_html
@@ -139,40 +152,13 @@ result = clean_html(html)
 from auto_spider.tools.dedup import create_duplicate_checker, is_duplicate
 from auto_spider import Task
 
-checker = create_duplicate_checker()  # 内存模式
-# 或 checker = create_duplicate_checker('seen.json')  # 持久化
+# 内存模式
+checker = create_duplicate_checker()
+
+# 持久化到文件
+checker = create_duplicate_checker('seen.json')
 
 task = Task(url='https://example.com')
 if not is_duplicate(checker, task):
     context.tasks.append(task)
 ```
-
----
-
-## Task
-
-Task 本质是 dict，可传入任意参数：
-
-```python
-from auto_spider import Task
-
-task = Task(url='https://example.com', page_type='list', retry=3)
-# 在action中通过 context.task.get('url') 获取
-```
-
----
-
-## 项目结构
-
-执行 `python -m auto_spider generate mysite` 后生成：
-
-```
-plan_mysite.py              # 主入口文件
-steps_mysite/               # 步骤包目录
-  ├── __init__.py
-  ├── action.py             # Action阶段步骤
-  ├── parse.py              # Parse阶段步骤
-  └── extract.py            # Extract阶段步骤
-```
-
-单文件模式 `--single-file` 生成 `plan_mysite.py`，所有代码在一个文件中。

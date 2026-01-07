@@ -9,7 +9,7 @@ import sys
 import importlib
 from typing import Dict, Callable, List, Any, Union, Set
 from ..step import Context
-from ..logger import build_logger
+from ..tools.logger import build_logger
 
 _LOGGER = build_logger('registry')
 
