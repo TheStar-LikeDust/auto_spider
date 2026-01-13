@@ -1,11 +1,11 @@
 """
-Step runner for different stages.
+Step executor for different stages.
 
 Execute step functions based on stage type.
 """
 
 from typing import List, Callable
-from .types import Context
+from ._context import Context
 from ..tools.logger import build_logger
 
 _LOGGER = build_logger('step_executor')

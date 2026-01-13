@@ -22,6 +22,32 @@ _EXTRACT_REGISTRY: Dict[str, Callable] = {}
 _TRACKED_MODULES: Set[str] = set()
 
 
+# ----------
+# decorators
+
+def action(priority: int = 500):
+    """Decorator to register action step."""
+    return step('action', priority)
+
+
+def parse(priority: int = 500):
+    """Decorator to register parse step."""
+    return step('parse', priority)
+
+
+def extract(priority: int = 500):
+    """Decorator to register extract step."""
+    return step('extract', priority)
+
+
+def active(priority: int = 500):
+    """Alias for action (backward compatibility)."""
+    return action(priority)
+
+
+# ----------
+# functions
+
 def register_step(stage: str, name: str, func: Callable, priority: int = 500):
     """
     Register step function to global registry.
@@ -35,7 +61,7 @@ def register_step(stage: str, name: str, func: Callable, priority: int = 500):
     # track module for hot reload
     if hasattr(func, '__module__'):
         _TRACKED_MODULES.add(func.__module__)
-    
+
     if stage == 'action':
         func.priority = priority
         _ACTION_REGISTRY[name] = func
@@ -64,30 +90,12 @@ def step(stage: str = 'action', priority: int = 500):
         def parse_html(context: Context):
             return extract_title(context['result'])
     """
+
     def decorator(func: Callable) -> Callable:
         register_step(stage, func.__name__, func, priority)
         return func
+
     return decorator
-
-
-def action(priority: int = 500):
-    """Decorator to register action step."""
-    return step('action', priority)
-
-
-def active(priority: int = 500):
-    """Alias for action (backward compatibility)."""
-    return action(priority)
-
-
-def parse(priority: int = 500):
-    """Decorator to register parse step."""
-    return step('parse', priority)
-
-
-def extract(priority: int = 500):
-    """Decorator to register extract step."""
-    return step('extract', priority)
 
 
 def get_step(stage: str, name: str) -> Callable:
@@ -178,7 +186,7 @@ def reload_tracked_modules():
         List of reloaded module names
     """
     reloaded = []
-    
+
     for module_name in _TRACKED_MODULES:
         if module_name in sys.modules:
             try:
@@ -188,7 +196,7 @@ def reload_tracked_modules():
                 _LOGGER.info(f"Reloaded module: {module_name}")
             except Exception as e:
                 _LOGGER.error(f"Failed to reload module {module_name}: {e}")
-    
+
     return reloaded
 
 

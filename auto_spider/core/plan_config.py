@@ -49,10 +49,6 @@ worker.py:
     - Passes config to Context
     - Does not directly read config values
 
-context.py:
-    - Stores config as context.config
-    - Available in all step functions via context.config
-
 User Steps:
     @action()
     def my_step(context: Context):

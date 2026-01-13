@@ -50,7 +50,7 @@ def build_task_feeder(tasks: List, task_queue, rate_limit: Optional[float]) -> O
         return None
 
 
-def shutdown_workers(task_queue, workers: List[TaskWorker], max_workers: int):
+def shutdown_workers(task_queue, workers: List['TaskWorker'], max_workers: int):
     """
     Shutdown workers and wait for completion.
     

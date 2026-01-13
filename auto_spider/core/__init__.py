@@ -21,7 +21,7 @@ from .registry import (
     get_tracked_modules,
 )
 
-from ..step import Task, generate_task_name, execute_steps
+from ..step import Task, execute_steps
 from .plan_scheduler import (
     run_plan,
     DEFAULT_MAX_WORKERS,
@@ -32,13 +32,8 @@ from .stage import (
     save_stage_result,
 )
 
-from .plan_scheduler import (
-    start_workers,
-)
-
 from .plan_worker import (
     SHUTDOWN_SIGNAL,
-    run_worker,
     dispatch_workers,
 )
 
@@ -91,7 +86,6 @@ __all__ = [
     
     # worker
     'SHUTDOWN_SIGNAL',
-    'run_worker',
     'dispatch_workers',
     
     # operations
@@ -108,7 +102,6 @@ __all__ = [
     'get_tasks_for_stage',
     'save_stage_result',
     'DEFAULT_MAX_WORKERS',
-    'start_workers',
     
     # storage
     'configure',
