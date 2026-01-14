@@ -11,7 +11,7 @@ from queue import Queue
 from ..step import Context, execute_steps
 from .stage import setup_context_for_stage, save_stage_result
 from .registry import get_step
-from .operations import initialize_spider, initialize_resources
+from .operations import initialize_spider, initialize_resources, setup_worker_storage
 from ..storage import save_failed_task
 from ..tools.logger import build_logger
 
@@ -144,7 +144,10 @@ def worker_run_loop(worker_id: int, task_queue, ready_barrier, start_barrier,
         3. Wait for start signal via start_barrier
         4. Process tasks until shutdown
     """
-    # 1. Prepare resources in subprocess/thread
+    # 1. Setup storage for subprocess (must be first)
+    setup_worker_storage(plan_config, stage_name)
+    
+    # 2. Prepare resources in subprocess/thread
     spider, initial, step_funcs = worker_prepare_resources(
         stage_name, step_names, spider_factory, initial_factory
     )
