@@ -1,26 +1,30 @@
 """
 Task worker for executing steps.
 
-Worker class with build-prepare-execute lifecycle."""
+Function-based worker with prepare-in-subprocess lifecycle."""
 
 import time
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional
 from multiprocessing import Process, JoinableQueue, Barrier
 from threading import Thread
 from queue import Queue
 from ..step import Context, execute_steps
 from .stage import setup_context_for_stage, save_stage_result
+from .registry import get_step
 from .operations import initialize_spider, initialize_resources
+from ..storage import save_failed_task
 from ..tools.logger import build_logger
 
 _LOGGER = build_logger('worker')
 
+# Module-level configuration
+WORKER_PREPARE_TIMEOUT = 30  # seconds to wait for workers to prepare
 SHUTDOWN_SIGNAL = '__SHUTDOWN__'
 
 
-def build_task_feeder(tasks: List, task_queue, rate_limit: Optional[float]) -> Optional[Thread]:
+def worker_task_feeder_initial(tasks: List, task_queue, rate_limit: Optional[float]) -> Optional[Thread]:
     """
-    Build task feeder thread for rate-limited task feeding.
+    Initialize task feeder thread for rate-limited task feeding.
     
     Args:
         tasks: Task list
@@ -50,18 +54,17 @@ def build_task_feeder(tasks: List, task_queue, rate_limit: Optional[float]) -> O
         return None
 
 
-def shutdown_workers(task_queue, workers: List['TaskWorker'], max_workers: int):
+def worker_shutdown(task_queue, workers: List, max_workers: int):
     """
     Shutdown workers and wait for completion.
     
     Args:
         task_queue: Task queue
-        workers: Worker list
+        workers: List of Thread or Process instances
         max_workers: Number of workers
     """
-    _LOGGER.info("Waiting for all tasks to complete...")
     task_queue.join()
-    _LOGGER.info("All tasks completed! ready to exit...")
+    _LOGGER.info("All tasks completed, shutting down...")
     time.sleep(1)
     
     for _ in range(max_workers):
@@ -73,120 +76,175 @@ def shutdown_workers(task_queue, workers: List['TaskWorker'], max_workers: int):
     _LOGGER.debug(f"All workers exited: {max_workers} workers")
 
 
-class TaskWorker:
+def worker_prepare_resources(stage_name: str, step_names: List[str],
+                             spider_factory: Callable, initial_factory: Callable):
     """
-    Worker that processes tasks with prepare-execute lifecycle.
+    Initialize worker resources in subprocess/thread.
+    
+    Args:
+        stage_name: Stage name
+        step_names: Step function names
+        spider_factory: Spider factory function
+        initial_factory: Initial resources factory
+        
+    Returns:
+        Tuple of (spider, initial, step_funcs)
+    """
+    if stage_name == 'action' and not spider_factory:
+        raise ValueError("spider_factory is required for action stage")
+    
+    if not initial_factory:
+        raise ValueError("initial_factory is required")
+    
+    spider = initialize_spider(spider_factory) if spider_factory else None
+    initial = initialize_resources(initial_factory)
+    step_funcs = [get_step(stage_name, name) for name in step_names]
+    return spider, initial, step_funcs
+
+
+def task_process(task: dict, task_name: str, spider, initial, step_funcs: List,
+                 stage_name: str, plan_name: str, plan_config):
+    """
+    Process a single task.
+    
+    Args:
+        task: Task dict
+        task_name: Task name for saving
+        spider: Spider instance
+        initial: Initial resources
+        step_funcs: Step functions
+        stage_name: Stage name
+        plan_name: Plan name
+        plan_config: PlanConfig instance
+        
+    Returns:
+        List of new tasks collected, or None
+    """
+    original_task = task.get('task', task) if isinstance(task, dict) else task
+    context = Context(spider=spider, task=original_task, initial=initial, config=plan_config, task_name=task_name)
+    
+    setup_context_for_stage(stage_name, context, task)
+    execute_steps(step_funcs, context)
+    
+    if plan_name and stage_name in ('action', 'parse'):
+        save_stage_result(stage_name, context, plan_name, task_name)
+    
+    return context.tasks if context.tasks else None
+
+
+def worker_run_loop(worker_id: int, task_queue, ready_barrier, start_barrier,
+                    stage_name: str, step_names: List[str], spider_factory: Callable,
+                    initial_factory: Callable, plan_name: str, plan_config):
+    """
+    Worker main loop: prepare resources then process tasks.
     
     Lifecycle:
-        1. __init__: create worker with parameters
-        2. prepare(): initialize resources (spider, initial, step_funcs)
-        3. start(): start processing tasks
-        4. join(): wait for completion
+        1. Prepare resources (spider, initial, step_funcs) in subprocess
+        2. Signal ready via ready_barrier
+        3. Wait for start signal via start_barrier
+        4. Process tasks until shutdown
     """
+    # 1. Prepare resources in subprocess/thread
+    spider, initial, step_funcs = worker_prepare_resources(
+        stage_name, step_names, spider_factory, initial_factory
+    )
+    _LOGGER.debug(f"[Worker-{worker_id}] Resources prepared")
     
-    def __init__(self, worker_id: int, task_queue, ready_barrier, start_barrier,
-                 stage_name: str, step_names: List[str], spider_factory: Callable,
-                 initial_factory: Callable, plan_name: str, plan_config):
-        self.worker_id = worker_id
-        self.task_queue = task_queue
-        self.ready_barrier = ready_barrier
-        self.start_barrier = start_barrier
-        self.stage_name = stage_name
-        self.step_names = step_names
-        self.spider_factory = spider_factory
-        self.initial_factory = initial_factory
-        self.plan_name = plan_name
-        self.plan_config = plan_config
-        
-        self.spider = None
-        self.initial = None
-        self.step_funcs = None
-        self._thread = None
-        self._process = None
+    # 2. Signal ready
+    _LOGGER.debug(f"[Worker-{worker_id}] Ready, waiting for other workers...")
+    ready_barrier.wait()
     
-    def prepare(self):
-        """Initialize resources before task execution."""
-        from .registry import get_step
-        
-        if self.stage_name == 'action' and not self.spider_factory:
-            raise ValueError("spider_factory is required for action stage")
-        
-        if not self.initial_factory:
-            raise ValueError("initial_factory is required")
-        
-        self.spider = initialize_spider(self.spider_factory) if self.spider_factory else None
-        self.initial = initialize_resources(self.initial_factory)
-        self.step_funcs = [get_step(self.stage_name, name) for name in self.step_names]
-        
-        _LOGGER.debug(f"[Worker-{self.worker_id}] Resources prepared")
+    # 3. Wait for start signal
+    _LOGGER.debug(f"[Worker-{worker_id}] Waiting for execution signal...")
+    start_barrier.wait()
     
-    def _run(self):
-        """Worker run loop."""
-        _LOGGER.debug(f"[Worker-{self.worker_id}] Ready, waiting for other workers...")
-        self.ready_barrier.wait()
+    # 4. Process tasks
+    while True:
+        item = task_queue.get()
         
-        _LOGGER.debug(f"[Worker-{self.worker_id}] Waiting for execution signal...")
-        self.start_barrier.wait()
+        if item == SHUTDOWN_SIGNAL:
+            task_queue.task_done()
+            _LOGGER.debug(f"[Worker-{worker_id}] Received shutdown signal")
+            break
         
-        while True:
-            item = self.task_queue.get()
-            
-            if item == SHUTDOWN_SIGNAL:
-                self.task_queue.task_done()
-                _LOGGER.debug(f"[Worker-{self.worker_id}] Received shutdown signal")
-                break
-            
-            try:
-                self._process_task(item)
-            finally:
-                self.task_queue.task_done()
-    
-    def _process_task(self, item: tuple):
-        """Process single task."""
         task_index, task = item
-        task_name = f'task{task_index + 1}'
+        task_name = f'task{task_index + 1}' if task_index is not None else 'task_dynamic'
         
         try:
-            _LOGGER.info(f"[Worker-{self.worker_id}] Start task: {task_name}")
+            _LOGGER.info(f"[Worker-{worker_id}] Start task: {task_name}")
             
-            original_task = task.get('task', task) if isinstance(task, dict) else task
-            context = Context(spider=self.spider, task=original_task, initial=self.initial, config=self.plan_config)
+            new_tasks = task_process(
+                task, task_name, spider, initial, step_funcs,
+                stage_name, plan_name, plan_config
+            )
             
-            setup_context_for_stage(self.stage_name, context, task)
-            execute_steps(self.step_funcs, context)
+            if new_tasks:
+                _LOGGER.info(f"[Worker-{worker_id}] Collected {len(new_tasks)} new tasks")
+                for new_task in new_tasks:
+                    task_queue.put((None, new_task))
             
-            if self.plan_name and self.stage_name in ('action', 'parse'):
-                save_stage_result(self.stage_name, context, self.plan_name, task_name)
-            
-            if context.tasks:
-                _LOGGER.info(f"[Worker-{self.worker_id}] Collected {len(context.tasks)} new tasks")
-                for new_task in context.tasks:
-                    self.task_queue.put((None, new_task))
-            
-            _LOGGER.info(f"[Worker-{self.worker_id}] Task completed: {task_name}")
+            _LOGGER.info(f"[Worker-{worker_id}] Task completed: {task_name}")
             
         except Exception as e:
-            _LOGGER.error(f"[Worker-{self.worker_id}] Task failed: {task_name}, error: {e}")
-            
-            if self.stage_name == 'action' and self.plan_name:
-                from ..storage import save_failed_task
-                save_failed_task(task_name, original_task, str(e), self.stage_name, self.worker_id)
+            _LOGGER.error(f"[Worker-{worker_id}] Task failed: {task_name}, error: {e}")
+            original_task = task.get('task', task) if isinstance(task, dict) else task
+            if stage_name == 'action' and plan_name:
+                save_failed_task(task_name, original_task, str(e), stage_name, worker_id)
+        finally:
+            task_queue.task_done()
+
+
+def worker_start(worker_id: int, task_queue, ready_barrier, start_barrier,
+                 stage_name: str, step_names: List[str], spider_factory: Callable,
+                 initial_factory: Callable, plan_name: str, plan_config,
+                 worker_type: str) -> Thread | Process:
+    """
+    Start a worker as thread or process.
     
-    def start(self, worker_type: str):
-        """Start worker as thread or process."""
-        if worker_type == 'process':
-            self._process = Process(target=self._run)
-            self._process.start()
-        else:
-            self._thread = Thread(target=self._run)
-            self._thread.start()
+    Returns:
+        Thread or Process instance
+    """
+    args = (worker_id, task_queue, ready_barrier, start_barrier,
+            stage_name, step_names, spider_factory, initial_factory,
+            plan_name, plan_config)
     
-    def join(self):
-        """Wait for worker to finish."""
-        if self._thread:
-            self._thread.join()
-        if self._process:
-            self._process.join()
+    if worker_type == 'process':
+        worker = Process(target=worker_run_loop, args=args)
+    else:
+        worker = Thread(target=worker_run_loop, args=args)
+    
+    worker.start()
+    return worker
+
+
+def worker_ready_block(ready_barrier, start_barrier, max_workers: int,
+                       timeout: float = WORKER_PREPARE_TIMEOUT):
+    """
+    Block until all workers are ready, then signal start.
+    
+    Args:
+        ready_barrier: Barrier for preparation sync
+        start_barrier: Barrier for execution start sync
+        max_workers: Number of workers
+        timeout: Timeout in seconds
+        
+    Raises:
+        TimeoutError: If workers don't prepare within timeout
+    """
+    _LOGGER.info(f"Waiting for {max_workers} workers to prepare (timeout: {timeout}s)...")
+    
+    try:
+        ready_barrier.wait(timeout=timeout)
+    except Exception as e:
+        raise TimeoutError(f"Workers failed to prepare within {timeout}s: {e}")
+    
+    _LOGGER.info("All workers ready, starting in 3...")
+    for i in range(2, 0, -1):
+        time.sleep(1)
+        _LOGGER.info(f"Starting in {i}...")
+    time.sleep(1)
+    
+    start_barrier.wait()
 
 
 def dispatch_workers(
@@ -202,7 +260,13 @@ def dispatch_workers(
     rate_limit: Optional[float] = None
 ):
     """
-    Dispatch tasks to workers with build-prepare-start lifecycle.
+    Dispatch tasks to workers.
+    
+    Lifecycle:
+        1. Start workers (each worker prepares resources in subprocess/thread)
+        2. Wait for all workers ready with timeout
+        3. Feed tasks to queue
+        4. Wait for completion
     
     Args:
         tasks: Task list
@@ -216,15 +280,14 @@ def dispatch_workers(
         max_workers: Number of concurrent workers
         rate_limit: Delay between tasks in seconds
     """
-    from .operations import wait_workers_ready
-    
-    # 1. build worker thread/process
+    # 1. Create synchronization primitives
     ready_barrier = Barrier(max_workers + 1)
     start_barrier = Barrier(max_workers + 1)
     task_queue = JoinableQueue() if worker_type == 'process' else Queue()
     
+    # 2. Start workers (prepare happens in subprocess/thread)
     workers = [
-        TaskWorker(
+        worker_start(
             worker_id=worker_id,
             task_queue=task_queue,
             ready_barrier=ready_barrier,
@@ -234,31 +297,24 @@ def dispatch_workers(
             spider_factory=spider_factory,
             initial_factory=initial_factory,
             plan_name=plan_name,
-            plan_config=plan_config
+            plan_config=plan_config,
+            worker_type=worker_type
         )
         for worker_id in range(max_workers)
     ]
     
-    # 2. make every worker finish initial spider/resources, get step
-    for worker in workers:
-        worker.prepare()
+    _LOGGER.info(f"Started {max_workers} {worker_type}s")
     
-    _LOGGER.info(f"All workers prepared: {max_workers} {worker_type}s")
+    # 3. Wait for workers to prepare with timeout
+    worker_ready_block(ready_barrier, start_barrier, max_workers)
     
-    # feeder thread for rate-limited task feeding
-    feeder_thread = build_task_feeder(tasks, task_queue, rate_limit)
-    
-    # 3. start every worker
-    for worker in workers:
-        worker.start(worker_type)
-    
-    # wait for workers ready and start
-    wait_workers_ready(ready_barrier, start_barrier, max_workers)
+    # 4. Feed tasks to queue
+    feeder_thread = worker_task_feeder_initial(tasks, task_queue, rate_limit)
     
     if feeder_thread:
         _LOGGER.info("Waiting for task feeder to complete...")
         feeder_thread.join()
         _LOGGER.info("All tasks have been fed to queue")
     
-    # 4. block until finish
-    shutdown_workers(task_queue, workers, max_workers)
+    # 5. Wait for completion
+    worker_shutdown(task_queue, workers, max_workers)

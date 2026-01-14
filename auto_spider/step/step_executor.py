@@ -28,11 +28,12 @@ def execute_steps(step_funcs: List[Callable], context: Context):
         _LOGGER.warning("No steps to execute")
         return
     
-    _LOGGER.info(f"Executing {len(step_funcs)} steps")
+    task_name = context.task_name or 'task'
+    _LOGGER.info(f"[{task_name}] Executing {len(step_funcs)} steps")
     
     for i, step_func in enumerate(step_funcs, 1):
         func_name = step_func.__name__
-        _LOGGER.debug(f"Step {i}/{len(step_funcs)}: Executing '{func_name}'")
+        _LOGGER.debug(f"[{task_name}] Step {i}/{len(step_funcs)}: '{func_name}'")
         
         try:
             result = step_func(context)

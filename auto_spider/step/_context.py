@@ -47,6 +47,7 @@ class Context(dict):
         db: Optional[Any] = None,
         config: Optional[Any] = None,
         cache: Optional[Any] = None,
+        task_name: Optional[str] = None,
         **kwargs
     ):
         """
@@ -59,6 +60,7 @@ class Context(dict):
             db: Database instance (deprecated, use initial)
             config: PlanConfig instance with plan settings
             cache: Cache instance (deprecated, use initial)
+            task_name: Task name for logging
             **kwargs: Business data
         """
         super().__init__(**kwargs)
@@ -68,6 +70,7 @@ class Context(dict):
         self.db = db
         self.config = config
         self.cache = cache
+        self.task_name = task_name
 
         self._step_results = {}
         self._step_history = []

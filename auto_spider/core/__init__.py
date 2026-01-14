@@ -34,6 +34,7 @@ from .stage import (
 
 from .plan_worker import (
     SHUTDOWN_SIGNAL,
+    WORKER_PREPARE_TIMEOUT,
     dispatch_workers,
 )
 
@@ -86,6 +87,7 @@ __all__ = [
     
     # worker
     'SHUTDOWN_SIGNAL',
+    'WORKER_PREPARE_TIMEOUT',
     'dispatch_workers',
     
     # operations

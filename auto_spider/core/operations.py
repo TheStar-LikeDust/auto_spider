@@ -13,26 +13,12 @@ from ..tools.logger import build_logger
 _LOGGER = build_logger('operations')
 
 
-def wait_workers_ready(ready_barrier, start_barrier, max_workers: int):
-    """
-    Wait for workers to be ready and start execution with countdown.
-    
-    Args:
-        ready_barrier: Barrier for preparation sync
-        start_barrier: Barrier for execution start sync
-        max_workers: Number of workers
-    """
-    _LOGGER.info(f"Waiting for {max_workers} workers to be ready...")
-    ready_barrier.wait()
-    
-    _LOGGER.info("All workers ready!")
-    _LOGGER.info("")
-    for i in range(2, 0, -1):
-        _LOGGER.info(f"Starting execution in {i}...")
-        time.sleep(1)
-    _LOGGER.info("Workers executing!")
-    
-    start_barrier.wait()
+def log_separator(title: str = None):
+    """Log a separator line for visual clarity."""
+    if title:
+        _LOGGER.info(f"{'=' * 20} {title} {'=' * 20}")
+    else:
+        _LOGGER.info('=' * 50)
 
 
 def setup_storage(plan_config=None, plan_name: str = None, output_dir: str = None):
@@ -146,7 +132,7 @@ def setup_stage_storage(stage_name: str, plan_config):
 
 def log_stage_start(stage_name: str, tasks: List, max_workers: int, step_names: List[str]):
     """
-    Log stage start information with countdown.
+    Log stage start information.
     
     Args:
         stage_name: Stage name
@@ -154,11 +140,5 @@ def log_stage_start(stage_name: str, tasks: List, max_workers: int, step_names: 
         max_workers: Number of workers
         step_names: Step names to execute
     """
-    _LOGGER.info(f"Running {stage_name} stage: {len(tasks)} tasks, {max_workers} workers, {stage_name}s: {step_names}")
-    _LOGGER.info("")
-    
-    for i in range(2, 0, -1):
-        _LOGGER.info(f"Starting in {i}...")
-        time.sleep(1)
-    _LOGGER.info("Execution started!")
-    _LOGGER.info("")
+    log_separator(f"{stage_name.upper()} STAGE")
+    _LOGGER.info(f"{len(tasks)} tasks, {max_workers} workers, steps: {step_names}")
