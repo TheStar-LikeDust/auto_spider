@@ -15,149 +15,149 @@ allowed-tools: Read, Grep, Glob, Bash, Write
 - Debugging issues by reviewing past attempts
 
 ## Log File Location
-Create a log file at the project root:
+Create a log file at the project root (use Chinese for user's language):
 ```
 TASK_{task_name}_log.md
 ```
 
-Example: `TASK_ecommerce_scraper_log.md`
+Example: `TASK_电商产品数据_log.md`
 
 ## Log Format
 
-### File Header
+### File Header (Chinese)
 ```markdown
-# Task: {Task Description}
+# 任务: {任务描述}
 
-- **Goal**: {What user wants to achieve}
-- **Created**: {YYYY-MM-DD HH:MM}
-- **Status**: In Progress / Completed / Failed
+- **目标**: {用户想要实现的目标}
+- **创建时间**: {YYYY-MM-DD HH:MM}
+- **状态**: 进行中 / 已完成 / 失败
 
-## Plans
-| Plan | Purpose | Status |
-|------|---------|--------|
-| plan_scout_xxx | Scout page structure | Done |
-| plan_xxx | Main scraping plan | In Progress |
+## 计划列表
+| 计划名称 | 用途 | 状态 |
+|---------|------|------|
+| plan_scout_xxx | 侦察页面结构 | 完成 |
+| plan_xxx | 主爬虫计划 | 进行中 |
 
 ---
 ```
 
-### Step Entry Format
+### Step Entry Format (Chinese)
 ```markdown
-## Step {N}: {Step Title}
+## 步骤 {N}: {步骤标题}
 
-- **Time**: {YYYY-MM-DD HH:MM}
-- **Plan**: {plan name or "N/A"}
-- **Stage**: Scout / Action / Parse / Extract / Verify / Iterate
-- **Purpose**: {What this step aims to achieve}
-- **Expected**: {What we expect to see if successful}
+- **时间**: {YYYY-MM-DD HH:MM}
+- **计划**: {计划名称 或 "无"}
+- **阶段**: 侦察 / Action / Parse / Extract / 验证 / 迭代
+- **目的**: {这一步要实现什么}
+- **预期**: {成功后应该看到什么}
 
-### Actions Taken
-{Description of what was done}
+### 执行操作
+{描述做了什么}
 
-### Result
-- **Status**: Success / Partial / Failed
-- **Actual**: {What actually happened}
-- **Files**: {List of files created/modified}
+### 结果
+- **状态**: 成功 / 部分成功 / 失败
+- **实际**: {实际发生了什么}
+- **文件**: {创建/修改的文件列表}
 
-### Notes
-{Any observations, issues, or decisions made}
+### 备注
+{任何观察、问题或决策}
 
 ---
 ```
 
-## Example Log
+## Example Log (Chinese)
 
 ```markdown
-# Task: Scrape E-commerce Product Data
+# 任务: 抓取电商产品数据
 
-- **Goal**: Extract all product info (name, price, url) from example-shop.com
-- **Created**: 2024-01-15 10:30
-- **Status**: In Progress
+- **目标**: 从 example-shop.com 提取所有产品信息（名称、价格、链接）
+- **创建时间**: 2024-01-15 10:30
+- **状态**: 进行中
 
-## Plans
-| Plan | Purpose | Status |
-|------|---------|--------|
-| plan_scout_shop | Scout product page | Done |
-| plan_shop | Main scraping | In Progress |
-
----
-
-## Step 1: Scout Target Page
-
-- **Time**: 2024-01-15 10:32
-- **Plan**: plan_scout_shop
-- **Stage**: Scout
-- **Purpose**: Understand page structure, find product list selectors
-- **Expected**: Get CSS/XPath for product items, prices, titles
-
-### Actions Taken
-Generated single-file scout plan, ran with headless=False.
-
-### Result
-- **Status**: Success
-- **Actual**: Found 20 product items, identified selectors:
-  - Product container: `div.product-card`
-  - Title: `h2.product-title`
-  - Price: `span.price`
-- **Files**: `plan_scout_shop.py`, `output/scout_shop_action_*/`
-
-### Notes
-Page uses lazy loading, need to scroll.
+## 计划列表
+| 计划名称 | 用途 | 状态 |
+|---------|------|------|
+| plan_scout_shop | 侦察产品页面 | 完成 |
+| plan_shop | 主爬虫 | 进行中 |
 
 ---
 
-## Step 2: Generate Main Plan
+## 步骤 1: 侦察目标页面
 
-- **Time**: 2024-01-15 10:40
-- **Plan**: plan_shop
-- **Stage**: Generate
-- **Purpose**: Create main scraping plan structure
-- **Expected**: Plan files with action/parse/extract steps
+- **时间**: 2024-01-15 10:32
+- **计划**: plan_scout_shop
+- **阶段**: 侦察
+- **目的**: 了解页面结构，找到产品列表选择器
+- **预期**: 获取产品项、价格、标题的 CSS/XPath
 
-### Actions Taken
+### 执行操作
+生成单文件侦察计划，headless=False 运行。
+
+### 结果
+- **状态**: 成功
+- **实际**: 找到 20 个产品项，识别出选择器：
+  - 产品容器: `div.product-card`
+  - 标题: `h2.product-title`
+  - 价格: `span.price`
+- **文件**: `plan_scout_shop.py`, `output/scout_shop_action_*/`
+
+### 备注
+页面使用懒加载，需要滚动。
+
+---
+
+## 步骤 2: 生成主计划
+
+- **时间**: 2024-01-15 10:40
+- **计划**: plan_shop
+- **阶段**: 生成
+- **目的**: 创建主爬虫计划结构
+- **预期**: 带有 action/parse/extract 步骤的计划文件
+
+### 执行操作
 `python -m auto_spider generate shop`
 
-### Result
-- **Status**: Success
-- **Actual**: Generated plan_shop.py and steps_shop/
-- **Files**: `plan_shop.py`, `steps_shop/`
+### 结果
+- **状态**: 成功
+- **实际**: 生成了 plan_shop.py 和 steps_shop/
+- **文件**: `plan_shop.py`, `steps_shop/`
 
-### Notes
-N/A
+### 备注
+无
 
 ---
 
-## Step 3: Write Action Step
+## 步骤 3: 编写 Action 步骤
 
-- **Time**: 2024-01-15 10:45
-- **Plan**: plan_shop
-- **Stage**: Action
-- **Purpose**: Download product listing page with all items loaded
-- **Expected**: HTML file with all 50 products visible
+- **时间**: 2024-01-15 10:45
+- **计划**: plan_shop
+- **阶段**: Action
+- **目的**: 下载加载所有商品的产品列表页
+- **预期**: HTML 文件包含所有 50 个产品
 
-### Actions Taken
-Added scroll logic to action step based on scout findings.
+### 执行操作
+基于侦察结果，在 action 步骤中添加滚动逻辑。
 
-### Result
-- **Status**: Success
-- **Actual**: HTML contains all 50 products after scrolling
-- **Files**: `steps_shop/action.py`, `output/shop_action_*/task0.html`
+### 结果
+- **状态**: 成功
+- **实际**: 滚动后 HTML 包含所有 50 个产品
+- **文件**: `steps_shop/action.py`, `output/shop_action_*/task1.html`
 
-### Notes
-5 scroll iterations with 500ms delay was sufficient.
+### 备注
+5 次滚动，每次间隔 500ms 已足够。
 
 ---
 ```
 
 ## When to Update Log
 
-| Event | Action |
-|-------|--------|
-| User assigns task | Create log file with header |
-| Create new plan | Add to Plans table |
-| Before each step | Add step entry with Purpose/Expected |
-| After each step | Fill in Result/Actual/Notes |
-| Task complete | Update Status in header to "Completed" |
+| 事件 | 操作 |
+|------|------|
+| 用户分配任务 | 创建日志文件和头部 |
+| 创建新计划 | 添加到计划列表 |
+| 每步执行前 | 添加步骤条目，写明目的/预期 |
+| 每步执行后 | 填写结果/实际/备注 |
+| 任务完成 | 更新头部状态为"已完成" |
 
 ## Related Skills
 - `scout-webpage` - Scout new webpages

@@ -5,11 +5,11 @@ Simple XPath extraction function.
 """
 
 from typing import List
-from lxml import etree
+from lxml import html
 
 
 def _extract_text(elements: List) -> List[str]:
-    """Extract text from elements."""
+    """Extract text from elements using xpath('string()')."""
     if not elements:
         return []
     
@@ -18,14 +18,13 @@ def _extract_text(elements: List) -> List[str]:
     
     results = []
     for e in elements:
-        if hasattr(e, 'text_content'):
-            text = e.text_content().strip()
-            if text:
-                results.append(text)
+        text = e.xpath('string()').strip()
+        if text:
+            results.append(text)
     return results
 
 
-def xpath_extract(html: str, xpath: str) -> List[str]:
+def xpath_extract(html_content: str, xpath_expr: str) -> List[str]:
     """
     Extract data from HTML using XPath.
     
@@ -49,12 +48,12 @@ def xpath_extract(html: str, xpath: str) -> List[str]:
         titles = xpath_extract(html, '//h1')
         # ['Title']
     """
-    if not html or not xpath:
+    if not html_content or not xpath_expr:
         return []
     
     try:
-        tree = etree.HTML(html)
-        elements = tree.xpath(xpath)
+        tree = html.fromstring(html_content)
+        elements = tree.xpath(xpath_expr)
         
         if not elements:
             return []

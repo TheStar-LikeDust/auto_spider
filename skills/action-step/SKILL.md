@@ -17,9 +17,11 @@ After `python -m auto_spider generate myplan`:
 - Multi-file: `steps_myplan/action.py`
 - Single-file: `plan_myplan.py` (inline `@action()` function)
 
-## Core Patterns
+## Progressive Approach
 
-### Default Template (generated)
+**⚠️ Always start simple, add complexity only when needed.**
+
+### Level 1: Basic Fetch (Start Here)
 ```python
 from auto_spider import action, Context
 
@@ -29,10 +31,14 @@ def fetch_page(context: Context):
     content = context.spider.do_url(url)
 
     context['content'] = content
-    context['result'] = {'url': url, 'status': 'success'}
+    context['result'] = {'url': url}
 ```
 
-### Wait for Element (dynamic page)
+**Use this first.** Verify output before adding more features.
+
+### Level 2: Wait for Content (if Level 1 fails)
+Only add if basic fetch returns empty/incomplete HTML.
+
 ```python
 @action()
 def fetch_with_wait(context: Context):
@@ -46,19 +52,54 @@ def fetch_with_wait(context: Context):
     context['result'] = {'url': url}
 ```
 
-### Lazy Loading (scroll)
+### Level 3: Lazy Loading (if content loads progressively)
 ```python
 @action()
 def fetch_lazy_load(context: Context):
     page = context.spider.get_driver()
     page.goto(context.task['url'])
 
+    # Scroll to trigger lazy loading
     for _ in range(5):
         page.evaluate('window.scrollBy(0, 1000)')
         page.wait_for_timeout(500)
 
     context['content'] = page.content()
 ```
+
+### Level 4: Click Actions (if interactive elements required)
+```python
+@action()
+def fetch_with_click(context: Context):
+    page = context.spider.get_driver()
+    page.goto(context.task['url'])
+
+    # Click "Load More" button
+    page.click('.load-more-btn')
+    page.wait_for_timeout(1000)
+
+    context['content'] = page.content()
+```
+
+### Level 5: Login/Complex Interactions
+```python
+@action()
+def fetch_with_login(context: Context):
+    page = context.spider.get_driver()
+
+    # Login first
+    page.goto('https://example.com/login')
+    page.fill('#username', 'user')
+    page.fill('#password', 'pass')
+    page.click('#submit')
+    page.wait_for_url('**/dashboard')
+
+    # Then fetch target page
+    page.goto(context.task['url'])
+    context['content'] = page.content()
+```
+
+## Advanced Patterns
 
 ### Incremental Crawl (append tasks)
 ```python
@@ -74,6 +115,35 @@ def fetch_list_and_enqueue(context: Context):
     context['content'] = content
     context['result'] = {'detail_count': len(detail_urls)}
 ```
+
+## Decision Tree
+
+```
+1. Start with Level 1 (basic fetch)
+   ↓
+2. Run and verify output
+   ↓
+3. Is HTML complete?
+   YES → Done, move to parse
+   NO  → Continue
+   ↓
+4. Is content delayed (AJAX)?
+   YES → Add Level 2 (wait for selector)
+   NO  → Continue
+   ↓
+5. Is content lazy-loaded (scroll)?
+   YES → Add Level 3 (scroll)
+   NO  → Continue
+   ↓
+6. Need click interactions?
+   YES → Add Level 4 (click)
+   NO  → Continue
+   ↓
+7. Need login/complex flow?
+   YES → Add Level 5 (login)
+```
+
+**Never skip levels.** Build incrementally.
 
 ## Output
 - `context['content']` -> `taskX.html`

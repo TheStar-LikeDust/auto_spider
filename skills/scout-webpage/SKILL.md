@@ -60,16 +60,41 @@ def fetch_page(context: Context):
 python plan_scout.py
 ```
 
-### 4. Check Output
+### 4. Analyze page_info Output
+
+**First, read and analyze the page_info JSON:**
 ```bash
-# View screenshot
+cat output/scout_action_*/task1_action.json
+```
+
+**Key analysis points:**
+- **Element count**: How many interactive elements found?
+- **Element roles**: What types? (button, link, textbox, etc.)
+- **Selectors**: Are CSS/XPath selectors specific enough?
+- **Naming**: Do element names match visual content?
+
+**Example analysis:**
+```json
+{
+  "title": "Product List",
+  "elements": [
+    {"index": 1, "role": "button", "name": "Load More", "css": ".load-more"},
+    {"index": 2, "role": "link", "name": "Product A", "css": "a.product-link"},
+    ...
+  ]
+}
+```
+
+✅ Found "Load More" button → need to click in action step
+✅ Product links use `.product-link` → use in parse step
+
+### 5. Check Visual Output
+```bash
+# View screenshot to verify element positions
 output/scout_screenshot.png
 
-# View interactive elements
-cat output/scout_action_*/task0_action.json
-
-# View HTML
-output/scout_action_*/task0.html
+# View HTML structure
+output/scout_action_*/task1.html
 ```
 
 ## Output: get_page_info() Structure
