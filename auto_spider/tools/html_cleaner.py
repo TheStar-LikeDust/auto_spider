@@ -4,13 +4,14 @@ HTML cleaner utilities.
 Clean HTML by removing noise tags and attributes.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from lxml import etree
 from lxml.html import tostring, HtmlElement
 
 
 _DEFAULT_REMOVE_TAGS = ['script', 'style', 'meta', 'svg', 'link', 'noscript', 'iframe']
-_DEFAULT_KEEP_ATTRS = ['id', 'class', 'href']
+_DEFAULT_KEEP_ATTRS = ['id', 'class', 'href', 'src', 'alt', 'title', 'name', 'type', 'value', 'placeholder']
+_DEFAULT_UNWRAP_TAGS = ['div', 'span']
 
 
 def _remove_elements(tree: HtmlElement, tags: List[str]) -> None:
@@ -49,6 +50,51 @@ def _get_text_content(tree: HtmlElement) -> str:
     return ' '.join(tree.xpath('//body//text()') or tree.xpath('//text()'))
 
 
+def _is_blank_text(text: Optional[str]) -> bool:
+    return text is None or text.strip() == ''
+
+
+def _compact_wrappers(tree: HtmlElement, unwrap_tags: List[str], max_passes: int = 5) -> None:
+    for _ in range(max_passes):
+        changed = False
+        elements = list(tree.xpath('//*'))
+        elements.reverse()
+
+        for element in elements:
+            if element.tag not in unwrap_tags:
+                continue
+            if element.attrib:
+                continue
+            if not _is_blank_text(element.text):
+                continue
+
+            parent = element.getparent()
+            if parent is None:
+                continue
+
+            if len(element) == 0:
+                if _is_blank_text(element.tail):
+                    parent.remove(element)
+                    changed = True
+                continue
+
+            if len(element) != 1:
+                continue
+
+            child = element[0]
+            if not _is_blank_text(child.tail):
+                continue
+
+            tail = element.tail
+            parent.replace(element, child)
+            if tail:
+                child.tail = (child.tail or '') + tail
+            changed = True
+
+        if not changed:
+            break
+
+
 def clean_html(html: str,
                remove_tags: List[str] = None,
                keep_attrs: List[str] = None,
@@ -84,6 +130,10 @@ def clean_html(html: str,
     """
     if not html:
         return {'html': '', 'text': '', 'body': ''}
+
+    html_stripped = html.lstrip()
+    if '<' not in html_stripped:
+        return {'html': html, 'text': '', 'body': html}
     
     try:
         tree = etree.HTML(html)
@@ -104,6 +154,8 @@ def clean_html(html: str,
     # remove comments
     if remove_comments:
         _remove_comments(tree)
+
+    _compact_wrappers(tree, list(_DEFAULT_UNWRAP_TAGS))
     
     # extract text before filtering attrs
     text = _get_text_content(tree)

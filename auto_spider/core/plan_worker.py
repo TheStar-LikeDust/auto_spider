@@ -4,6 +4,9 @@ Task worker for executing steps.
 Function-based worker with prepare-in-subprocess lifecycle."""
 
 import time
+import json
+import hashlib
+import re
 from typing import Callable, List, Optional
 from multiprocessing import Process, JoinableQueue, Barrier
 from threading import Thread
@@ -20,6 +23,36 @@ _LOGGER = build_logger('worker')
 # Module-level configuration
 WORKER_PREPARE_TIMEOUT = 30  # seconds to wait for workers to prepare
 SHUTDOWN_SIGNAL = '__SHUTDOWN__'
+
+
+def _slugify(value: str, max_length: int = 40) -> str:
+    value_lower = (value or '').lower()
+    value_clean = re.sub(r'[^a-z0-9]+', '_', value_lower)
+    value_clean = re.sub(r'_+', '_', value_clean).strip('_')
+    return value_clean[:max_length]
+
+
+def _task_fingerprint(task) -> str:
+    try:
+        task_json = json.dumps(task, ensure_ascii=False, sort_keys=True, default=str)
+    except Exception:
+        task_json = repr(task)
+    return hashlib.sha1(task_json.encode('utf-8')).hexdigest()[:8]
+
+
+def _build_dynamic_task_name(task) -> str:
+    task_name_source = None
+    if isinstance(task, dict):
+        task_name_source = task.get('name') or task.get('url')
+    else:
+        task_name_source = getattr(task, 'name', None) or getattr(task, 'url', None)
+
+    slug = _slugify(str(task_name_source)) if task_name_source else ''
+    fingerprint = _task_fingerprint(task)
+
+    if slug:
+        return f'task_dynamic_{slug}_{fingerprint}'
+    return f'task_dynamic_{fingerprint}'
 
 
 def worker_task_feeder_initial(tasks: List, task_queue, rate_limit: Optional[float]) -> Optional[Thread]:
@@ -171,7 +204,7 @@ def worker_run_loop(worker_id: int, task_queue, ready_barrier, start_barrier,
             break
         
         task_index, task = item
-        task_name = f'task{task_index + 1}' if task_index is not None else 'task_dynamic'
+        task_name = f'task{task_index + 1}' if task_index is not None else _build_dynamic_task_name(task)
         
         try:
             _LOGGER.info(f"[Worker-{worker_id}] Start task: {task_name}")

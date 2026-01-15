@@ -1,10 +1,9 @@
 ---
-name: action-step
-description: Write Auto Spider action steps to download HTML (PlaywrightSpider/RequestSpider). Keywords: action step, download, fetch, login, pagination, lazy load.
-allowed-tools: Read, Grep, Glob, Bash
+name: write-action
+description: Write action steps to download HTML. Use when implementing fetch, login, pagination, or lazy load.
 ---
 
-# Action Step
+# Write Action
 
 ## When to Use
 - Need to download HTML content
@@ -150,6 +149,7 @@ def fetch_list_and_enqueue(context: Context):
 - `context['result']` -> `taskX_action.json`
 
 ## Related Skills
-- `verify-step-output`
-- `iterate-next-step`
-- `parse-step`
+- `exec-run-verify` - 运行和验证
+- `write-parse` - 编写 parse
+- `sense-scout` - 侦察页面
+- `log-task` - 记录任务

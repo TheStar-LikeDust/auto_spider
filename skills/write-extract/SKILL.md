@@ -1,10 +1,9 @@
 ---
-name: extract-step
-description: Write extract steps to persist parsed data to DB/files/APIs. Keywords: extract step, save to db, csv, json, persistence.
-allowed-tools: Read, Grep, Glob, Bash
+name: write-extract
+description: Write extract steps to persist data. Use when saving to database, CSV, JSON, or APIs.
 ---
 
-# Extract Step
+# Write Extract
 
 ## When to Use
 - Persist parse results to database/files
@@ -69,6 +68,6 @@ def save_to_csv(context: Context):
 ```
 
 ## Related Skills
-- `verify-step-output`
-- `iterate-next-step`
-- `config-and-run`
+- `exec-run-verify` - 运行和验证
+- `write-parse` - 编写 parse
+- `log-task` - 记录任务

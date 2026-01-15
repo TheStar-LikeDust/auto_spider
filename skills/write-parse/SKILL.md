@@ -1,10 +1,9 @@
 ---
-name: parse-step
-description: Write parse steps to extract structured data from HTML using XPath/BS4/regex. Keywords: parse step, xpath, extract fields, clean html.
-allowed-tools: Read, Grep, Glob, Bash
+name: write-parse
+description: Write parse steps to extract structured data. Use when parsing HTML with XPath or cleaning content.
 ---
 
-# Parse Step
+# Write Parse
 
 ## When to Use
 - Convert HTML into structured data (dict/list)
@@ -62,6 +61,7 @@ def parse_clean(context: Context):
 - `context['result']` -> `taskX_parse.json`
 
 ## Related Skills
-- `verify-step-output`
-- `iterate-next-step`
-- `extract-step`
+- `exec-run-verify` - 运行和验证
+- `write-extract` - 编写 extract
+- `sense-clean-html` - 分析 HTML 结构
+- `log-task` - 记录任务

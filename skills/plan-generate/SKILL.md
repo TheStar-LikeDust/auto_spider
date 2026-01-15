@@ -1,10 +1,9 @@
 ---
-name: generate-plan
-description: Generate an Auto Spider plan template (single-file or multi-file). Keywords: generate plan, scaffold, template, start project.
-allowed-tools: Read, Grep, Glob, Bash
+name: plan-generate
+description: Generate plan template files. Use when starting a new scraping project.
 ---
 
-# Generate Plan
+# Plan Generate
 
 ## When to Use
 - Starting a new scraping project
@@ -43,6 +42,7 @@ plan_myplan.py
 - Choose `PlaywrightSpider` for dynamic pages, `RequestSpider` for static pages.
 
 ## Related Skills
-- `scout-webpage`
-- `action-step`
-- `config-and-run`
+- `sense-scout` - 侦察页面
+- `write-action` - 编写 action
+- `exec-run-verify` - 运行和验证
+- `log-task` - 记录任务

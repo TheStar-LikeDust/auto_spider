@@ -5,6 +5,7 @@ Plan script with 3 fixed functions and inline steps.
 """
 
 from auto_spider import action, parse, extract, Context
+from auto_spider.tools.html_cleaner import clean_html
 from auto_spider.core import Task, run_plan, PlanConfig
 from auto_spider.components import PlaywrightSpider
 
@@ -60,11 +61,17 @@ def fetch_page(context: Context):
     # get page info with interactive elements via CDP
     page_info = context.spider.get_page_info()
 
+    clean_result = clean_html(content)
+    cleaned_html = clean_result.get('body', '')
+
     # save raw HTML to context['content']
     context['content'] = content
     
     # save page info to context['result']
-    context['result'] = page_info
+    context['result'] = {
+        'page_info': page_info,
+        'cleaned_html': cleaned_html,
+    }
     
     # action stage saves:
     # - task1_task.json (original task from context.task)
@@ -93,7 +100,7 @@ def parse_data(context: Context):
     data = {
         'title': 'Example Title',
         'items': [],
-        'source_url': action_result.get('url', '')
+        'source_url': action_result.get('page_info', {}).get('url', action_result.get('url', ''))
     }
     
     # save parsed data to context['result']
