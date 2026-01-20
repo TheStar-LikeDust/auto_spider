@@ -9,10 +9,10 @@ description = "简单高效的三阶段网页爬虫框架"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-    {name = "Logic", email = "logic@example.com"}
+    {name = "TheStar-LikeDust"}
 ]
 maintainers = [
-    {name = "Logic", email = "logic@example.com"}
+    {name = "TheStar-LikeDust"}
 ]
 keywords = ["scraping", "crawler", "automation", "web"]
 classifiers = [
@@ -33,6 +33,7 @@ requires-python = ">=3.8"
 dependencies = [
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
+    "click>=8.0.0",
 ]
 
 [project.optional-dependencies]
@@ -51,9 +52,9 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/logic/auto_spider"
-Repository = "https://github.com/logic/auto_spider.git"
-Issues = "https://github.com/logic/auto_spider/issues"
+Homepage = "https://github.com/TheStar-LikeDust/auto_spider"
+Repository = "https://github.com/TheStar-LikeDust/auto_spider.git"
+Issues = "https://github.com/TheStar-LikeDust/auto_spider/issues"
 
 [project.scripts]
 auto-spider = "auto_spider.cli:main"
@@ -64,4 +65,8 @@ include = ["auto_spider*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-auto_spider = ["py.typed"]
+auto_spider = [
+    "py.typed",
+    "skills/**/*.md",
+    "docs/*.md",
+]

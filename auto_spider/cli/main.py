@@ -1,99 +1,40 @@
 """
-CLI argument parsing.
+CLI main entry point using Click.
 
-Main entry point for CLI tool.
+Usage:
+    auto-spider init
+    auto-spider generate myplan
+    auto-spider run plan_myplan.py fetch_page --stage action
 """
 
-import argparse
-from .commands import cmd_generate, cmd_run
-from ..core.plan_scheduler import DEFAULT_MAX_WORKERS
+import click
+
+from .cmd_init import cmd_init
+from .cmd_generate import cmd_generate
+from .cmd_run import cmd_run
 
 
-def _wrap_cmd_generate(args):
-    """Wrapper for cmd_generate to handle argparse args."""
-    cmd_generate(args.name, args.description, args.single_file)
+@click.group()
+@click.version_option(version='0.1.0', prog_name='auto-spider')
+def cli():
+    """Auto Spider - Web scraping automation framework."""
+    pass
 
 
-def _wrap_cmd_run(args):
-    """Wrapper for cmd_run to handle argparse args."""
-    cmd_run(args.plan_file, args.steps, args.stage, args.workers, args.retry_failed)
+cli.add_command(cmd_init, name='init')
+cli.add_command(cmd_generate, name='generate')
+cli.add_command(cmd_run, name='run')
 
-
+# aliases
+cli.add_command(cmd_init, name='i')
+cli.add_command(cmd_generate, name='gen')
+cli.add_command(cmd_generate, name='g')
+cli.add_command(cmd_run, name='r')
 
 
 def main():
-    """Main CLI entry with subcommands."""
-    parser = argparse.ArgumentParser(
-        description='Auto Spider - Web scraping automation framework',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Generate new plan
-  auto-spider generate myplan
-  auto-spider generate myplan --single-file
-  
-  # Run plan stages
-  auto-spider run plan_myplan.py fetch_page --stage action
-  auto-spider run plan_myplan.py parse_data --stage parse
-  auto-spider run plan_myplan.py save_data --stage extract
-  
-  # Retry failed tasks
-  auto-spider run plan_myplan.py fetch_page --stage action --retry-failed
-  
-  # Or just run the plan file directly
-  python plan_myplan.py
-        """
-    )
-    
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
-    
-    # generate subcommand
-    parser_gen = subparsers.add_parser(
-        'generate',
-        help='Generate plan template',
-        aliases=['gen', 'g']
-    )
-    parser_gen.add_argument('name', help='Plan name (generates plan_{name}.py)')
-    parser_gen.add_argument('-d', '--description', help='Plan description')
-    parser_gen.add_argument(
-        '--single-file',
-        action='store_true',
-        help='Generate single file with inline steps (default: separate steps package)'
-    )
-    parser_gen.set_defaults(func=_wrap_cmd_generate)
-    
-    # run subcommand
-    parser_run = subparsers.add_parser(
-        'run',
-        help='Run plan file',
-        aliases=['r']
-    )
-    parser_run.add_argument('plan_file', help='Path to plan Python file')
-    parser_run.add_argument('steps', help='Comma-separated step names (e.g., fetch_page,parse_data)')
-    parser_run.add_argument(
-        '-s', '--stage',
-        choices=['action', 'parse', 'extract'],
-        help='Execution stage (auto-detect if not specified)'
-    )
-    parser_run.add_argument(
-        '-w', '--workers',
-        type=int,
-        default=DEFAULT_MAX_WORKERS,
-        help=f'Number of workers (default: {DEFAULT_MAX_WORKERS})'
-    )
-    parser_run.add_argument(
-        '--retry-failed',
-        action='store_true',
-        help='Retry failed tasks from previous run instead of running initial_task (action stage only)'
-    )
-    parser_run.set_defaults(func=_wrap_cmd_run)
-
-    args = parser.parse_args()
-    
-    if hasattr(args, 'func'):
-        args.func(args)
-    else:
-        parser.print_help()
+    """Entry point for CLI."""
+    cli()
 
 
 if __name__ == '__main__':

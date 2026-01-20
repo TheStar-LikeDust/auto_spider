@@ -1,5 +1,6 @@
 # Core dependencies
 requests>=2.31.0
+click>=8.0.0
 
 # Browser automation
 playwright>=1.40.0

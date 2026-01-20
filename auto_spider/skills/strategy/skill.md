@@ -50,7 +50,7 @@ description: Define target and strategy before formal data collection. Progressi
 ### 采集目标
 
 **页面**: UCI 专业目录
-**URL**: https://catalogue.uci.edu/allcourses/
+**URL**: https://example.com/courses/
 
 **目标数据**:
 - 专业名称
@@ -199,7 +199,7 @@ if __name__ == '__main__':
 - **最后更新**: 2024-01-15 11:45
 
 ## 目标
-- **页面**: https://catalogue.uci.edu/allcourses/
+- **页面**: https://example.com/courses/
 - **目标数据**: 专业名称、类型、链接
 - **预期数量**: ~170 个
 

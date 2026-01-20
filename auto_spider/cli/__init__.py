@@ -1,10 +1,12 @@
 """
-CLI module for plan management.
+CLI package using Click.
 
-Command implementations for plan generation and execution.
+Commands:
+    init     - Initialize project with skills/docs
+    generate - Generate plan template
+    run      - Run plan file
 """
 
-from .commands import cmd_generate, cmd_run
-from .main import main
+from .main import main, cli
 
-__all__ = ['cmd_generate', 'cmd_run', 'main']
+__all__ = ['main', 'cli']
