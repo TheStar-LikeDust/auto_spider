@@ -102,13 +102,13 @@ def save_data(context: Context):
 ### 3. 运行
 
 ```bash
-# 方式一：修改主文件
-python plan_myplan.py
+# 推荐：使用 CLI 命令
+auto-spider run plan_myplan.py fetch_page --stage action
+auto-spider run plan_myplan.py parse_data --stage parse
+auto-spider run plan_myplan.py save_data --stage extract
 
-# 方式二：CLI
-python -m auto_spider run plan_myplan.py fetch_page -s action
-python -m auto_spider run plan_myplan.py parse_data -s parse
-python -m auto_spider run plan_myplan.py save_data -s extract
+# 重试失败任务
+auto-spider run plan_myplan.py fetch_page --stage action --retry-failed
 ```
 
 ## 执行逻辑

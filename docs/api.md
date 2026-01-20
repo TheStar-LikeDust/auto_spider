@@ -28,6 +28,7 @@ PLAN_CONFIG.OUTPUT_DIR = 'output'          # 输出目录路径
 PLAN_CONFIG.MAX_WORKERS = 4                # 并发Worker数量
 PLAN_CONFIG.RATE_LIMIT = 1.0               # 任务间隔秒数，None为无限制
 PLAN_CONFIG.STORAGE_TIMESTAMP = True       # 目录名是否带时间戳
+PLAN_CONFIG.TASK_RETRY_COUNT = 3           # 任务重试次数（1次初始 + 2次重试）
 ```
 
 ## Context

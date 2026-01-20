@@ -28,15 +28,19 @@ description: Run stages and verify output. Use when executing action/parse/extra
 
 ## Step 1: 运行阶段
 
-### 命令格式
+### 命令格式（推荐 CLI）
 ```bash
 # 运行 action
-python plan_xxx.py
+auto-spider run plan_xxx.py fetch_page --stage action
 
-# 或通过 CLI
-python -m auto_spider run plan_xxx.py fetch_page -s action
-python -m auto_spider run plan_xxx.py parse_data -s parse
-python -m auto_spider run plan_xxx.py save_data -s extract
+# 运行 parse
+auto-spider run plan_xxx.py parse_data --stage parse
+
+# 运行 extract
+auto-spider run plan_xxx.py save_data --stage extract
+
+# 重试失败任务
+auto-spider run plan_xxx.py fetch_page --stage action --retry-failed
 ```
 
 ### 配置参数
@@ -49,6 +53,7 @@ PLAN_CONFIG.OUTPUT_DIR = 'output'
 PLAN_CONFIG.MAX_WORKERS = 4
 PLAN_CONFIG.RATE_LIMIT = 1.0
 PLAN_CONFIG.STORAGE_TIMESTAMP = True
+PLAN_CONFIG.TASK_RETRY_COUNT = 3      # 任务重试次数（1次初始 + 2次重试）
 ```
 
 ---

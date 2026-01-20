@@ -2,9 +2,9 @@
 
 > **核心规范文档 - AI 助手在使用 Auto Spider 前必读**
 
-## 🚫 禁止事项
+## 禁止事项
 
-### 不要写独立脚本
+### 不要写独立爬虫脚本
 ```python
 # ❌ 错误 - 不要这样写
 from bs4 import BeautifulSoup
@@ -27,13 +27,21 @@ import scrapy                   # 不在 requirements.txt
 ### 不要跳过 Skills
 开始任务前必须阅读相关 skills。
 
+### 数据文件读取优先级
+```
+1. 先用 sense skill 感知数据存在性
+2. 再用 analyze-script 生成分析脚本
+3. 最后才考虑直接读取文件（作为最后手段）
+```
+
+**原因**: 数据文件可能很大，直接读取会超出 token 限制
+
 ---
 
-## ✅ 正确做法
+## 正确做法
 
 ### 使用 Auto Spider 框架
 ```python
-# ✅ 正确
 from auto_spider import action, parse, extract, Context
 
 @action()
@@ -56,7 +64,7 @@ def save_data(context: Context):
 
 ---
 
-## 🔧 可用工具
+## 可用工具
 
 ### Spider 类型
 ```python
@@ -69,22 +77,69 @@ from auto_spider.components import PlaywrightSpider
 
 ### 解析工具
 ```python
-# XPath 提取
 from auto_spider.tools.xpath import xpath_extract
-
-# HTML 清洗
 from auto_spider.tools.html_cleaner import clean_html
+from auto_spider.tools.html_to_markdown import html_to_markdown
 ```
 
 ### 页面信息 (仅 PlaywrightSpider)
 ```python
-# 获取交互元素、选择器、位置
 page_info = context.spider.get_page_info()
 ```
 
 ---
 
-## 📝 任务日志规范
+## 决策流程
+
+```
+用户分配任务
+      ↓
+创建 TASK_xxx_log.md (log-task skill)
+      ↓
+感知页面数据 (sense skill)
+      ↓
+输出数据存在性报告
+      ↓
+制定采集策略 (strategy skill)
+      ↓
+生成 plan (plan-generate skill)
+      ↓
+实现 action/parse/extract (write-* skills)
+      ↓
+运行并验证 (exec-run-verify skill)
+      ↓
+失败？调整策略，重试
+```
+
+---
+
+## Skills 列表
+
+| Skill | 用途 | 何时使用 |
+|-------|------|----------|
+| `sense` | 感知数据存在性 | 新页面，了解数据在哪 |
+| `strategy` | 制定采集策略 | sense 后，决定方案 |
+| `plan-generate` | 生成 plan 结构 | 准备开始写代码 |
+| `write-action` | 写 action 步骤 | 下载 HTML |
+| `write-parse` | 写 parse 步骤 | 提取数据 |
+| `write-extract` | 写 extract 步骤 | 保存数据 |
+| `exec-run-verify` | 运行和验证 | 执行并检查结果 |
+| `log-task` | 记录任务日志 | 全程记录 |
+| `analyze-script` | 复杂分析用独立脚本 | 需要复杂 Python 操作 |
+
+---
+
+## 核心原则
+
+1. **先感知后编码**: 新页面先用 sense 了解数据存在性
+2. **从简单开始**: RequestSpider + XPath 优先，失败再升级
+3. **感知与决策分离**: sense 只报告数据存在，strategy 制定方案
+4. **一个 Plan 干一件事**: 每个 plan 只完成一个明确目标
+5. **记录每一步**: 用 log-task 记录所有操作
+
+---
+
+## 任务日志规范
 
 ### 文件位置
 ```
@@ -100,12 +155,13 @@ TASK_{task_name}_log.md
 - **状态**: 进行中 / 已完成 / 失败
 
 ## 原始需求
-{用户原话，一字不改}
+{用户原话}
 
-## 计划列表
-| 计划名称 | 用途 | 状态 |
-|---------|------|------|
-| plan_xxx | xxx | 待执行 |
+## Sense 结论
+{数据存在性报告}
+
+## 采集策略
+{方案 A/B/C}
 ```
 
 ### 步骤格式
@@ -113,61 +169,12 @@ TASK_{task_name}_log.md
 ## 步骤 {N}: {标题}
 
 - **时间**: {YYYY-MM-DD HH:MM}
-- **计划**: {计划名称}
-- **阶段**: 侦察 / Action / Parse / Extract / 验证
-- **目的**: {目标}
-- **预期**: {成功标志}
+- **阶段**: Sense / Strategy / Action / Parse / Extract / 验证
 
-### 执行操作
-{命令/修改的文件}
+### 执行
+{操作内容}
 
 ### 结果
 - **状态**: 成功 / 失败
-- **实际**: {实际发生}
-- **文件**: {文件列表}
-
-### 备注
-{观察/问题/决策}
+- **备注**: {观察}
 ```
-
----
-
-## 🎯 决策树
-
-```
-用户分配任务
-    ↓
-新任务? → 创建 TASK_xxx_log.md
-    ↓
-侦察过页面? → 否 → scout-webpage skill
-    ↓
-有 plan? → 否 → generate-plan skill
-    ↓
-执行哪个步骤?
-    Action → action-step skill
-    Parse → parse-step skill
-    Extract → extract-step skill
-    ↓
-每步操作后更新日志
-```
-
----
-
-## 📚 Skills 阅读顺序
-
-1. **本文档** (ai-assistant-guide)
-2. **scout-webpage** - 侦察新页面
-3. **generate-plan** - 生成项目结构
-4. **action-step** - 下载 HTML
-5. **parse-step** - 提取数据
-6. **extract-step** - 保存数据
-7. **run-and-verify** - 运行和验证
-
----
-
-## ⚠️ 核心原则
-
-1. **一个 Plan 干一件事**: 每个 plan 只完成一个明确的目标
-2. **先侦察后编码**: 新页面必须先 scout
-3. **渐进式实现**: 从最简单的 action 开始，按需添加复杂度
-4. **记录每一步**: 日志中记录所有原子操作

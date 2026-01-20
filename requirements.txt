@@ -4,5 +4,8 @@ requests>=2.31.0
 # Browser automation
 playwright>=1.40.0
 
+# Content extraction
+trafilatura>=1.6.0
+
 # Optional dependencies for environment configuration
 python-dotenv>=1.0.0

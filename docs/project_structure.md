@@ -103,6 +103,7 @@ Step的生命周期管理，从注册到执行的完整流程。
   - `MAX_WORKERS` - Worker数量
   - `RATE_LIMIT` - 速率限制
   - `STORAGE_TIMESTAMP` - 是否带时间戳
+  - `TASK_RETRY_COUNT` - 任务重试次数（默认3：1次初始 + 2次重试）
 
 #### `registry.py` - Step注册器
 - **作用**: 管理step函数的注册和获取

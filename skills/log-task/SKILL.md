@@ -5,7 +5,19 @@ description: Create and update task log in append mode. Use to track execution f
 
 # Log Task
 
-> 创建和追加更新任务日志。记录执行流程的黑盒记录。
+> 创建和追加更新任务日志。记录 agent 执行的每个小步骤。
+
+## 与 Strategy 的区分
+
+| 文档 | 文件名 | 内容 |
+|------|--------|------|
+| **Log** | `TASK_{name}_log.md` | 执行步骤记录（做了什么） |
+| **Strategy** | `TASK_{name}_strategy.md` | 思考和决策记录（为什么这样做） |
+
+**一致性要求**：
+- 任务名称 `{name}` 必须相同
+- 两个文档同步创建
+- 递增式追加，不修改已有内容
 
 ## When to Use
 - 用户分配新任务时创建日志
@@ -181,5 +193,6 @@ TASK_{task_name}_log.md
 ---
 
 ## Related Skills
-- `sense-scout` - 侦察后记录
+- `strategy` - 同步更新策略文档
+- `sense` - 感知后记录
 - `exec-run-verify` - 执行后记录

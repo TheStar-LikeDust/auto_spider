@@ -154,6 +154,9 @@ class PlanConfig(dict, DictAttributeMixin, RuntimeConfigMixin):
     # Use timestamp in storage directory name (True: action_20241118_150000, False: action)
     STORAGE_TIMESTAMP: bool = True
     
+    # Task retry count (default: 3 = 1 initial + 2 retries)
+    TASK_RETRY_COUNT: int = 3
+    
     def __init__(self):
         super().__init__()
         if self.STORAGE_OPTIONS is None:

@@ -2,6 +2,19 @@
 $description
 
 Plan script with 3 fixed functions.
+
+Usage (via CLI):
+    # Run action stage
+    auto-spider run plan_$name.py fetch_page --stage action
+    
+    # Run parse stage
+    auto-spider run plan_$name.py parse_data --stage parse
+    
+    # Run extract stage
+    auto-spider run plan_$name.py save_data --stage extract
+    
+    # Retry failed tasks
+    auto-spider run plan_$name.py fetch_page --stage action --retry-failed
 """
 
 from auto_spider.core import Task, run_plan, PlanConfig
@@ -18,6 +31,8 @@ PLAN_CONFIG.PLAN_NAME = '$name'
 PLAN_CONFIG.MAX_WORKERS = 4           # number of concurrent workers
 PLAN_CONFIG.RATE_LIMIT = None         # delay between tasks in seconds (None = no limit)
 PLAN_CONFIG.OUTPUT_DIR = 'steps_$name/output'  # output in steps package
+PLAN_CONFIG.STORAGE_TIMESTAMP = True  # True: timestamped dirs, False: overwrite mode
+PLAN_CONFIG.TASK_RETRY_COUNT = 3      # retry count per task (1 initial + 2 retries)
 
 
 # ============== Plan Functions ==============
@@ -49,13 +64,15 @@ def initial_plan():
     return initial
 
 
-# ============== Execution ==============
+# ============== Debug Execution ==============
+# Uncomment below to run directly for debugging
+# Recommended: use CLI commands above for production
 
-if __name__ == '__main__':
-    run_plan(
-        initial_spider, initial_task, initial_plan,
-        plan_config=PLAN_CONFIG,
-        actions=['fetch_page'],      # action: fetch HTML
-        # parses=['parse_data'],     # parse: extract data from HTML
-        # extracts=['save_data'],    # extract: save to database
-    )
+# if __name__ == '__main__':
+#     run_plan(
+#         initial_spider, initial_task, initial_plan,
+#         plan_config=PLAN_CONFIG,
+#         actions=['fetch_page'],      # action: fetch HTML
+#         # parses=['parse_data'],     # parse: extract data from HTML
+#         # extracts=['save_data'],    # extract: save to database
+#     )

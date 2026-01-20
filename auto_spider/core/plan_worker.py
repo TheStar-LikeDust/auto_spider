@@ -206,28 +206,44 @@ def worker_run_loop(worker_id: int, task_queue, ready_barrier, start_barrier,
         task_index, task = item
         task_name = f'task{task_index + 1}' if task_index is not None else _build_dynamic_task_name(task)
         
-        try:
-            _LOGGER.info(f"[Worker-{worker_id}] Start task: {task_name}")
-            
-            new_tasks = task_process(
-                task, task_name, spider, initial, step_funcs,
-                stage_name, plan_name, plan_config
-            )
-            
-            if new_tasks:
-                _LOGGER.info(f"[Worker-{worker_id}] Collected {len(new_tasks)} new tasks")
-                for new_task in new_tasks:
-                    task_queue.put((None, new_task))
-            
-            _LOGGER.info(f"[Worker-{worker_id}] Task completed: {task_name}")
-            
-        except Exception as e:
-            _LOGGER.error(f"[Worker-{worker_id}] Task failed: {task_name}, error: {e}")
+        retry_count = getattr(plan_config, 'TASK_RETRY_COUNT', 3)
+        last_error = None
+        
+        for attempt in range(retry_count):
+            try:
+                if attempt == 0:
+                    _LOGGER.info(f"[Worker-{worker_id}] Start task: {task_name}")
+                else:
+                    _LOGGER.info(f"[Worker-{worker_id}] Retry task: {task_name} (attempt {attempt + 1}/{retry_count})")
+                
+                new_tasks = task_process(
+                    task, task_name, spider, initial, step_funcs,
+                    stage_name, plan_name, plan_config
+                )
+                
+                if new_tasks:
+                    _LOGGER.info(f"[Worker-{worker_id}] Collected {len(new_tasks)} new tasks")
+                    for new_task in new_tasks:
+                        task_queue.put((None, new_task))
+                
+                _LOGGER.info(f"[Worker-{worker_id}] Task completed: {task_name}")
+                last_error = None
+                break
+                
+            except Exception as e:
+                last_error = e
+                if attempt < retry_count - 1:
+                    _LOGGER.warning(f"[Worker-{worker_id}] Task failed: {task_name}, error: {e}, will retry...")
+                    time.sleep(1)
+                else:
+                    _LOGGER.error(f"[Worker-{worker_id}] Task failed after {retry_count} attempts: {task_name}, error: {e}")
+        
+        if last_error:
             original_task = task.get('task', task) if isinstance(task, dict) else task
             if stage_name == 'action' and plan_name:
-                save_failed_task(task_name, original_task, str(e), stage_name, worker_id)
-        finally:
-            task_queue.task_done()
+                save_failed_task(task_name, original_task, str(last_error), stage_name, worker_id)
+        
+        task_queue.task_done()
 
 
 def worker_start(worker_id: int, task_queue, ready_barrier, start_barrier,
