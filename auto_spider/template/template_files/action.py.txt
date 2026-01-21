@@ -1,0 +1,43 @@
+"""
+$description - Action steps
+
+Action stage: fetch data with spider (PlaywrightSpider).
+"""
+
+from auto_spider import action, Context
+from auto_spider.tools.html_cleaner import clean_html
+from auto_spider.tools.html_to_markdown import html_to_markdown
+
+
+@action()
+def fetch_page(context: Context):
+    """Navigate to URL and get page info with interactive elements."""
+    url = context.task.get('url')
+    if not url:
+        raise ValueError("Task must have 'url' field")
+    
+    # navigate to page
+    content = context.spider.do_url(url)
+    
+    # convert to markdown (best for understanding content)
+    markdown = html_to_markdown(content)
+    
+    # clean HTML (for XPath extraction)
+    cleaned_html = clean_html(content).get('body', '')
+    
+    # get interactive elements via CDP
+    page_info = context.spider.get_page_info()
+
+    context['content'] = content
+    context['result'] = {
+        'markdown': markdown,
+        'cleaned_html': cleaned_html,
+        'page_info': page_info,
+    }
+    
+    # action stage saves:
+    # - task1_task.json (original task from context.task)
+    # - task1_action.json (page_info + cleaned_html from context['result'])
+    # - task1.html (content from context['content'])
+    
+    return content
