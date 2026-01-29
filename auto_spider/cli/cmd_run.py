@@ -6,7 +6,7 @@ Run plan file with specified stage.
 
 import click
 
-from ..core.plan_scheduler import run_plan, DEFAULT_MAX_WORKERS
+from ..core.plan_scheduler import run_plan_with_file, DEFAULT_MAX_WORKERS
 
 
 @click.command('run')
@@ -53,6 +53,6 @@ def cmd_run(plan_file, steps, stage, workers, retry_failed):
     else:
         stage_params['extracts'] = step_list
     
-    run_plan(plan_file=plan_file, max_workers=workers, retry_failed=retry_failed, **stage_params)
+    run_plan_with_file(plan_file, retry_failed=retry_failed, **stage_params)
     
     click.echo(f"\nPlan execution completed")

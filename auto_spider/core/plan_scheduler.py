@@ -132,15 +132,25 @@ def run_plan(
                           plan_name, max_workers, rate_limit, plan_config)
 
 
-def run_plan_with_file(plan_file: str):
+def run_plan_with_file(
+        plan_file: str,
+        actions: List[str] = None,
+        parses: List[str] = None,
+        extracts: List[str] = None,
+        retry_failed: bool = False
+):
     """
     Run plan by loading from plan file.
     
     Args:
         plan_file: Path to plan file
+        actions: Override action steps (use file config if None)
+        parses: Override parse steps (use file config if None)
+        extracts: Override extract steps (use file config if None)
+        retry_failed: Retry failed tasks
         
     Example:
-        run_plan_with_file('plan_example.py')
+        run_plan_with_file('plan_example.py', actions=['fetch_page'])
     """
     plan_params = load_plan_module(plan_file)
 
@@ -149,7 +159,8 @@ def run_plan_with_file(plan_file: str):
         initial_task=plan_params['initial_task'],
         initial_plan=plan_params['initial_plan'],
         plan_config=plan_params['plan_config'],
-        actions=plan_params['actions'],
-        parses=plan_params['parses'],
-        extracts=plan_params['extracts']
+        actions=actions if actions else plan_params['actions'],
+        parses=parses if parses else plan_params['parses'],
+        extracts=extracts if extracts else plan_params['extracts'],
+        retry_failed=retry_failed
     )
