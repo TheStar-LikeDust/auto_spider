@@ -69,4 +69,5 @@ auto_spider = [
     "py.typed",
     "skills/**/*.md",
     "docs/*.md",
+    "docs/**/*.md",
 ]

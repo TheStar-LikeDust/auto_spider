@@ -121,7 +121,7 @@ if __name__ == '__main__':
 
 ```
 project/
-├── plan_xxx.py          # 主 plan
+├── myplan.py            # 主 plan
 ├── scripts/              # 独立分析脚本
 │   ├── analyze_links.py
 │   ├── debug_xpath.py
@@ -132,6 +132,6 @@ project/
 ---
 
 ## Related Skills
-- `sense` - 页面感知
+- `sense-scout` - 侦察页面
+- `sense-clean-html` - 分析 HTML 结构
 - `write-parse` - 编写 parse
-- `log-task` - 记录任务

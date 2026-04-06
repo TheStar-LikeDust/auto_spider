@@ -4,7 +4,7 @@ CLI main entry point using Click.
 Usage:
     auto-spider init
     auto-spider generate myplan
-    auto-spider run plan_myplan.py fetch_page --stage action
+    auto-spider run plan_myplan.py --action
 """
 
 import click

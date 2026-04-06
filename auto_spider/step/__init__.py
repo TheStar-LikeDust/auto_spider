@@ -13,7 +13,8 @@ Type hierarchy:
 """
 
 from ._context import Context
-from ._action_input import Task, ActionInput
+from ._task import Task, ActionInput
+from ._result import Result
 from ._parse_input import ParseInput
 from ._extract_input import ExtractInput
 from .step_executor import execute_steps
@@ -22,6 +23,7 @@ __all__ = [
     'Context',
     'Task',
     'ActionInput',
+    'Result',
     'ParseInput',
     'ExtractInput',
     'execute_steps',

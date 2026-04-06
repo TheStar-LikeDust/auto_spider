@@ -4,10 +4,10 @@ auto_spider - Web scraping automation framework.
 Workflow:
 1. Create @action(), @parse(), @extract() functions in files
 2. Import: import your action modules to register steps
-3. Execute: core.run_plan() with stage-specific parameters
+3. Execute: core.run_plan() with stage parameter ('action', 'parse', 'extract')
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # for developing steps
 from .step import Context, Task

@@ -1,94 +1,41 @@
-"""Storage interface - routes to different backends."""
+"""Storage interface - setup_storage returns a unified process_result callable."""
 
-from pathlib import Path
-from typing import List
+import functools
+from typing import Callable
 
-# Current backend configuration
-_backend_type = 'file'
-_backend_module = None
+_backend_modules = []
 
 
-def configure(config=None, backend='file', stage_dir=None, stage=None, **options):
+def setup_storage(backends: list, plan_config) -> Callable:
     """
-    Configure storage backend.
-    
+    Setup all backends and return a unified process_result function.
+
     Args:
-        config: PlanConfig instance
-        backend: Backend type ('file', 'redis', 'sqlite')
-        stage_dir: Stage directory path (for multiprocess workers)
-        stage: Stage name (for multiprocess workers)
-        **options: Backend-specific options
+        backends: List of backend names, e.g. ['file'] or ['file', 'mongo']
+        plan_config: PlanConfig instance passed to each backend's setup()
+
+    Returns:
+        process_result(result) callable that fans out to all backends
     """
-    global _backend_type, _backend_module
-    
-    if config is not None:
-        _backend_type = getattr(config, 'STORAGE_BACKEND', 'file')
-    else:
-        _backend_type = backend
-    
-    # Import and configure backend
-    if _backend_type == 'file':
-        from . import _file_storage_backend
-        _backend_module = _file_storage_backend
-        _file_storage_backend.configure(config, stage_dir=stage_dir, stage=stage, **options)
-    elif _backend_type == 'redis':
-        # from . import redis_backend
-        # _backend_module = redis_backend
-        # redis_backend.configure(config, **options)
-        raise NotImplementedError('Redis backend not implemented')
-    elif _backend_type == 'sqlite':
-        # from . import sqlite_backend
-        # _backend_module = sqlite_backend
-        # sqlite_backend.configure(config, **options)
-        raise NotImplementedError('SQLite backend not implemented')
-    else:
-        raise ValueError(f'Unknown backend: {_backend_type}')
+    global _backend_modules
+    _backend_modules = []
+
+    for backend in backends:
+        if backend == 'file':
+            from . import _file_storage_backend
+            _file_storage_backend.setup(plan_config)
+            _backend_modules.append(_file_storage_backend)
+        else:
+            raise ValueError(f'Unknown backend: {backend}')
+
+    return functools.partial(_dispatch_to_backends, list(_backend_modules))
 
 
-def initial_storage(stage: str) -> Path:
-    """Initialize storage for a stage."""
-    if _backend_module is None:
-        configure()  # Auto-configure with defaults
-    return _backend_module.initial_storage(stage)
-
-
-def save_action_result(task_name: str, task: dict, action: dict, content: str):
-    """Save action result."""
-    if _backend_module is None:
-        configure()
-    _backend_module.save_action_result(task_name, task, action, content)
-
-
-def load_action_result() -> List[dict]:
-    """Load action results."""
-    if _backend_module is None:
-        configure()
-    return _backend_module.load_action_result()
-
-
-def save_parse_result(task_name: str, task: dict, action: dict, parse: dict, content: str):
-    """Save parse result."""
-    if _backend_module is None:
-        configure()
-    _backend_module.save_parse_result(task_name, task, action, parse, content)
-
-
-def load_parse_result() -> List[dict]:
-    """Load parse results."""
-    if _backend_module is None:
-        configure()
-    return _backend_module.load_parse_result()
-
-
-def save_failed_task(task_name: str, task: dict, error: str, stage: str = 'action', worker_id: int = None):
-    """Save failed task information."""
-    if _backend_module is None:
-        configure()
-    _backend_module.save_failed_task(task_name, task, error, stage, worker_id)
-
-
-def load_failed_tasks(stage: str = 'action') -> List[dict]:
-    """Load all failed tasks for a stage."""
-    if _backend_module is None:
-        configure()
-    return _backend_module.load_failed_tasks(stage)
+def _dispatch_to_backends(backend_modules: list, result: dict):
+    """Fan out result to all configured backends with error isolation."""
+    for module in backend_modules:
+        try:
+            module.process_result(result)
+        except Exception as e:
+            from ..tools.logger import build_logger
+            build_logger('storage').error(f"Backend '{module.__name__}' process_result failed: {e}")

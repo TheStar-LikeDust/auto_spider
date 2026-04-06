@@ -12,9 +12,19 @@ description: Generate plan template files. Use when starting a new scraping proj
 
 ## Core Patterns
 
+### Generate Single-File Plan (Default)
+```bash
+auto-spider generate myplan
+```
+
+Creates:
+```
+myplan.py
+```
+
 ### Generate Multi-File Project
 ```bash
-python -m auto_spider generate myplan
+auto-spider generate myplan --module
 ```
 
 Creates:
@@ -24,25 +34,16 @@ steps_myplan/
   action.py
   parse.py
   extract.py
-plan_myplan.py
-```
-
-### Generate Single-File Plan
-```bash
-python -m auto_spider generate myplan --single-file
-```
-
-Creates:
-```
-plan_myplan.py
+myplan.py
 ```
 
 ## Notes
-- `plan_myplan.py` contains `PLAN_CONFIG`, `initial_spider()`, `initial_task()`, `initial_plan()`.
+- `myplan.py` contains `PLAN_CONFIG`, `initial_spider()`, `initial_task()`, `initial_plan()`.
 - Choose `PlaywrightSpider` for dynamic pages, `RequestSpider` for static pages.
+- Run with: `auto-spider run myplan --action` (`.py` extension optional)
 
 ## Related Skills
 - `sense-scout` - 侦察页面
 - `write-action` - 编写 action
 - `exec-run-verify` - 运行和验证
-- `log-task` - 记录任务
+- `analyze-script` - 复杂分析用独立脚本

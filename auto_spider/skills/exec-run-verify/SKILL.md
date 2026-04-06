@@ -30,17 +30,17 @@ description: Run stages and verify output. Use when executing action/parse/extra
 
 ### 命令格式（推荐 CLI）
 ```bash
-# 运行 action
-auto-spider run plan_xxx.py fetch_page --stage action
+auto-spider run myplan --action         # .py 扩展名可选
+auto-spider run myplan.py --parse       # 两种写法都支持
+auto-spider run myplan --extract
+auto-spider run myplan --action --retry-failed
+```
 
-# 运行 parse
-auto-spider run plan_xxx.py parse_data --stage parse
-
-# 运行 extract
-auto-spider run plan_xxx.py save_data --stage extract
-
-# 重试失败任务
-auto-spider run plan_xxx.py fetch_page --stage action --retry-failed
+step 名称由 plan 文件中的模块级列表配置：
+```python
+ACTION_STEPS = ['fetch_page']
+PARSE_STEPS = ['parse_data']
+EXTRACT_STEPS = ['save_data']
 ```
 
 ### 配置参数
@@ -63,10 +63,10 @@ PLAN_CONFIG.TASK_RETRY_COUNT = 3      # 任务重试次数（1次初始 + 2次�
 ### Action 输出验证
 ```bash
 # 检查 HTML 文件大小
-ls -lh output/myplan_action_*/task1.html
+ls -lh output/myplan/action_*/task1.html
 
 # 搜索目标内容
-grep -l "target-keyword" output/myplan_action_*/task1.html
+grep -l "target-keyword" output/myplan/action_*/task1.html
 ```
 
 **检查点**:
@@ -77,7 +77,7 @@ grep -l "target-keyword" output/myplan_action_*/task1.html
 ### Parse 输出验证
 ```bash
 # 查看 JSON 结果
-cat output/myplan_parse_*/task1_parse.json
+cat output/myplan/parse_*/task1_parse.json
 ```
 
 **检查点**:
@@ -147,8 +147,8 @@ titles = xpath_extract(content, '//h1')             # 整个元素
 - **目的**: 下载产品列表页并验证
 
 ### 执行操作
-1. 运行: `python plan_shop.py`
-2. 检查: `ls -lh output/shop_action_*/task1.html`
+1. 运行: `auto-spider run shop --action`
+2. 检查: `ls -lh output/shop/action_*/task1.html`
 
 ### 结果
 - **状态**: 失败
@@ -163,9 +163,9 @@ titles = xpath_extract(content, '//h1')             # 整个元素
 ## 步骤 5: 重新运行 Action
 
 ### 执行操作
-1. 修改 action.py 添加滚动
-2. 运行: `python plan_shop.py`
-3. 检查: `grep "product-card" output/shop_action_*/task1.html | wc -l`
+1. 修改 shop.py 添加滚动
+2. 运行: `auto-spider run shop --action`
+3. 检查: `grep "product-card" output/shop/action_*/task1.html | wc -l`
 
 ### 结果
 - **状态**: 成功
@@ -180,4 +180,4 @@ titles = xpath_extract(content, '//h1')             # 整个元素
 - `write-extract` - 编写 extract 代码
 - `sense-page-info` - 调试时分析交互元素
 - `sense-clean-html` - 调试时分析 HTML
-- `log-task` - 记录执行结果
+- `analyze-script` - 复杂分析用独立脚本

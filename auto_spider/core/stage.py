@@ -1,202 +1,283 @@
 """
 Stage manager for different execution stages.
 
-Get tasks for stages and save stage results.
+Prepare stage (storage + tasks), build context, save results.
 """
 
-from pathlib import Path
-from typing import Callable, List
-from ..storage import load_action_result, load_parse_result, save_action_result, save_parse_result, load_failed_tasks
-from ..step import Context
+import functools
+import queue as thread_queue
+from multiprocessing import Process, Queue, JoinableQueue, Barrier as ProcessBarrier
+from threading import Thread, Barrier as ThreadBarrier
+from typing import Callable, List, Tuple
+from ..storage._file_storage_backend import (load_action_result, load_parse_result, load_failed_tasks)
+from ..step import Context, Result, execute_steps
+from .step_registry import get_stage_steps
+from .operations import initialize_spider, initialize_resources
 from ..tools.logger import build_logger
 
 _LOGGER = build_logger('stage')
 
 
-def get_tasks_for_stage(stage: str, plan_name: str = None, initial_task: Callable = None) -> List:
+# ── resource preparation ──
+
+def prepare_action_resources(worker_id: int, spider_factory: Callable, initial_factory: Callable, plan_config) -> Tuple:
     """
-    Unified task getter for all stages with structured context keys.
+    Prepare resources for action stage worker.
     
-    Args:
-        stage: Stage type ('action', 'parse', 'extract')
-        plan_name: Plan name (required for parse/extract)
-        initial_task: Task factory (required for action)
-        
     Returns:
-        List of tasks with proper context structure:
-        
-        Action stage: returns Task objects directly
-        
-        Parse stage: returns dict with keys:
-            - input: action result dict
-            - content: action HTML content
-            - task: original task
-            
-        Extract stage: returns dict with keys:
-            - input: parse result dict
-            - content: action HTML content  
-            - task: original task
-            - parse_input: action result dict
+        (spider, initial, step_funcs)
     """
-    # action stage: return raw tasks
-    if stage == 'action':
-        return initial_task()
+    if not spider_factory:
+        raise ValueError("spider_factory is required for action stage")
+    if not initial_factory:
+        raise ValueError("initial_factory is required")
     
-    # parse stage: load action results
-    elif stage == 'parse':
-        loaded_tasks = load_action_result()
-        
-        tasks = []
-        for loaded in loaded_tasks:
-            # loaded has: task, action, parse, content
-            tasks.append({
-                'task': loaded['task'],            # original task
-                'input': loaded['action'],         # action result (as parse input)
-                'content': loaded['content'],      # HTML
-                'action_result': loaded['action']  # for saving
-            })
-        return tasks
+    spider = initialize_spider(spider_factory)
+    initial = initialize_resources(initial_factory)
     
-    # extract stage: load parse results
-    elif stage == 'extract':
-        loaded_tasks = load_parse_result()
-        
-        tasks = []
-        for loaded in loaded_tasks:
-            # loaded has: task, action, parse, content
-            tasks.append({
-                'task': loaded['task'],            # original task
-                'input': loaded['parse'],          # parse result (as extract input)
-                'content': loaded['content'],      # HTML
-                'action_result': loaded['action'], # action result
-                'parse_result': loaded['parse']    # parse result
-            })
-        return tasks
+    step_names = getattr(plan_config, '_action_steps', None) or None
+    step_funcs = get_stage_steps('action', step_names)
     
+    _LOGGER.debug(f"[Worker-{worker_id}] Action resources prepared")
+    return spider, initial, step_funcs
+
+
+def prepare_parse_resources(worker_id: int, spider_factory: Callable, initial_factory: Callable, plan_config) -> Tuple:
+    """
+    Prepare resources for parse stage worker.
+    
+    Returns:
+        (spider, initial, step_funcs)
+    """
+    if not initial_factory:
+        raise ValueError("initial_factory is required")
+    
+    spider = None
+    initial = initialize_resources(initial_factory)
+    
+    step_names = getattr(plan_config, '_parse_steps', None) or None
+    step_funcs = get_stage_steps('parse', step_names)
+    
+    _LOGGER.debug(f"[Worker-{worker_id}] Parse resources prepared")
+    return spider, initial, step_funcs
+
+
+def prepare_extract_resources(worker_id: int, spider_factory: Callable, initial_factory: Callable, plan_config) -> Tuple:
+    """
+    Prepare resources for extract stage worker.
+    
+    Returns:
+        (spider, initial, step_funcs)
+    """
+    if not initial_factory:
+        raise ValueError("initial_factory is required")
+    
+    spider = None
+    initial = initialize_resources(initial_factory)
+    
+    step_names = getattr(plan_config, '_extract_steps', None) or None
+    step_funcs = get_stage_steps('extract', step_names)
+    
+    _LOGGER.debug(f"[Worker-{worker_id}] Extract resources prepared")
+    return spider, initial, step_funcs
+
+
+# ── task execution ──
+
+def execute_action_task(task, task_index: int, spider, initial, plan_config, step_funcs: List[Callable]) -> Result:
+    """
+    Action stage complete execution: build context -> execute steps -> build result.
+    """
+    original_task = task.get('task', task) if isinstance(task, dict) else task
+    task_name = f'task{task_index}' if task_index is not None else None
+    
+    context = Context(spider=spider, task=original_task, initial=initial,
+                      config=plan_config, task_name=task_name)
+    context['input'] = task
+    
+    execute_steps(step_funcs, context)
+    
+    return Result(
+        index=task_index,
+        task=dict(context.task),
+        stage='action',
+        new_tasks=context.append_tasks if context.append_tasks else None,
+        result=context.get('result', {}),
+        content=context.get('content', '')
+    )
+
+
+def execute_parse_task(task, task_index: int, spider, initial, plan_config, step_funcs: List[Callable]) -> Result:
+    """
+    Parse stage complete execution: build context -> execute steps -> build result.
+    """
+    original_task = task.get('task', task) if isinstance(task, dict) else task
+    task_name = f'task{task_index}' if task_index is not None else None
+    
+    context = Context(spider=spider, task=original_task, initial=initial,
+                      config=plan_config, task_name=task_name)
+    context['input'] = task.get('input', {})
+    context['content'] = task.get('content', '')
+    context['action_result'] = task.get('action_result', {})
+    
+    execute_steps(step_funcs, context)
+    
+    return Result(
+        index=task_index,
+        task=dict(context.task),
+        stage='parse',
+        new_tasks=context.append_tasks if context.append_tasks else None,
+        action_result=context.get('action_result', {}),
+        result=context.get('result', {}),
+        content=context.get('content', '')
+    )
+
+
+def execute_extract_task(task, task_index: int, spider, initial, plan_config, step_funcs: List[Callable]):
+    """
+    Extract stage complete execution: build context -> execute steps (side effects only).
+    """
+    original_task = task.get('task', task) if isinstance(task, dict) else task
+    task_name = f'task{task_index}' if task_index is not None else None
+    
+    context = Context(spider=spider, task=original_task, initial=initial,
+                      config=plan_config, task_name=task_name)
+    context['input'] = task.get('input', {})
+    context['content'] = task.get('content', '')
+    context['action_result'] = task.get('action_result', {})
+    context['parse_result'] = task.get('parse_result', {})
+    
+    execute_steps(step_funcs, context)
+    
+    return None
+
+
+
+# ── action stage preparation ──
+
+def prepare_action_stage_class(plan_config) -> Tuple:
+    """Determine worker and barrier class for action stage."""
+    use_thread = getattr(plan_config, 'USE_THREAD_WORKERS', False)
+    worker_class = Thread if use_thread else Process
+    barrier_class = ThreadBarrier if use_thread else ProcessBarrier
+    return worker_class, barrier_class
+
+
+def prepare_action_stage_task_components(plan_config, initial_task: Callable = None,
+                                         retry_failed: bool = False,
+                                         task_params: dict = None,
+                                         init_params: dict = None,
+                                         tasks: list = None) -> Tuple:
+    """Create output dir, queues, load and seed tasks for action stage."""
+    use_thread = getattr(plan_config, 'USE_THREAD_WORKERS', False)
+    if use_thread:
+        task_pending_queue = thread_queue.Queue()
+        task_result_queue = thread_queue.Queue()
     else:
-        raise ValueError(f"Unknown stage: {stage}")
+        task_pending_queue = JoinableQueue()
+        task_result_queue = Queue()
 
-
-def setup_context_for_stage(stage: str, context: Context, task_dict: dict):
-    """
-    Setup context keys for specific stage.
-    
-    Unified context setup logic for all stages:
-        - action: input = task
-        - parse: input = action result, adds action_result
-        - extract: input = parse result, adds action_result and parse_result
-    
-    Args:
-        stage: Stage type ('action', 'parse', 'extract')
-        context: Context object to setup
-        task_dict: Task data dict from get_tasks_for_stage or initial_task
-    """
-    if stage == 'action':
-        # action stage: input is the original task
-        context['input'] = task_dict
-        
-    elif stage == 'parse':
-        # parse stage: input is action result
-        context['input'] = task_dict.get('input', {})           # action result
-        context['content'] = task_dict.get('content', '')       # HTML
-        context['action_result'] = task_dict.get('action_result', {}) # for saving
-        
-    elif stage == 'extract':
-        # extract stage: input is parse result
-        context['input'] = task_dict.get('input', {})           # parse result
-        context['content'] = task_dict.get('content', '')       # HTML
-        context['action_result'] = task_dict.get('action_result', {})
-        context['parse_result'] = task_dict.get('parse_result', {})
-
-
-def save_stage_result(stage: str, context: Context, plan_name: str, task_name: str):
-    """
-    Save stage result by reading from context keys.
-    
-    Saves all relevant data from context for each stage:
-        - action: saves task, action_result, content
-        - parse: saves task, action_result, parse_result, content
-        - extract: does not save (side-effect only)
-    
-    Args:
-        stage: Stage type ('action', 'parse', 'extract')
-        context: Context object with results
-        plan_name: Plan name
-        task_name: Task name (e.g., 'task1')
-    """
-    if stage == 'action':
-        task = dict(context.task)
-        action_result = context.get('result', {})
-        content = context.get('content', '')
-        save_action_result(task_name, task, action_result, content)
-    
-    elif stage == 'parse':
-        task = dict(context.task)
-        action_result = context.get('action_result', {})
-        parse_result = context.get('result', {})
-        content = context.get('content', '')
-        save_parse_result(task_name, task, action_result, parse_result, content)
-    
-    elif stage == 'extract':
-        # extract stage: read only, no save
-        pass
-
-
-def prepare_action_tasks(initial_task: Callable, retry_failed: bool = False) -> List:
-    """
-    Prepare tasks for action stage.
-    
-    Args:
-        initial_task: Task factory function (required unless retry_failed=True)
-        retry_failed: Retry failed tasks
-        
-    Returns:
-        List of tasks
-    """
     if retry_failed:
         failed_tasks = load_failed_tasks('action')
         tasks = [item['task'] for item in failed_tasks]
         if not tasks:
             _LOGGER.info("No failed tasks found, action stage will be skipped")
-            return []
-        _LOGGER.info(f"Retrying {len(tasks)} failed tasks")
-        return tasks
+        else:
+            _LOGGER.info(f"Retrying {len(tasks)} failed tasks")
+    elif tasks is not None:
+        _LOGGER.info(f"Using {len(tasks)} tasks from --tasks argument")
     else:
         if not initial_task:
-            raise ValueError("initial_task is required for action stage (unless retry_failed=True)")
-        tasks = initial_task()
-        if not tasks:
-            _LOGGER.info("No tasks from initial_task, action stage will be skipped")
-        return tasks
+            raise ValueError("initial_task is required for action stage (unless retry_failed=True or --tasks provided)")
+        tasks = initial_task(init_params) if init_params else initial_task()
+
+    if task_params:
+        tasks = [{**task, **task_params} for task in tasks]
+
+    for task in tasks:
+        task_pending_queue.put(task)
+    _LOGGER.info(f"Seeded {len(tasks)} tasks for action stage")
+
+    return task_pending_queue, task_result_queue
 
 
-def prepare_parse_tasks(plan_name: str) -> List:
-    """
-    Prepare tasks for parse stage.
-    
-    Args:
-        plan_name: Plan name for loading results
-        
-    Returns:
-        List of tasks
-    """
-    tasks = get_tasks_for_stage('parse', plan_name=plan_name)
-    if not tasks:
-        _LOGGER.info("No tasks from parse stage, parse stage will be skipped")
-    return tasks
+def prepare_action_stage_function(plan_config, spider_factory: Callable,
+                                  initial_factory: Callable) -> Callable:
+    """Create worker prepare function for action stage."""
+    return functools.partial(
+        prepare_action_resources,
+        spider_factory=spider_factory,
+        initial_factory=initial_factory,
+        plan_config=plan_config
+    )
 
 
-def prepare_extract_tasks(plan_name: str) -> List:
-    """
-    Prepare tasks for extract stage.
-    
-    Args:
-        plan_name: Plan name for loading results
-        
-    Returns:
-        List of tasks
-    """
-    tasks = get_tasks_for_stage('extract', plan_name=plan_name)
-    if not tasks:
-        _LOGGER.info("No tasks from extract stage, extract stage will be skipped")
-    return tasks
+# ── parse stage preparation ──
+
+def prepare_parse_stage_class() -> Tuple:
+    """Determine worker and barrier class for parse stage (always thread)."""
+    return Thread, ThreadBarrier
+
+
+def prepare_parse_stage_task_components(plan_config) -> Tuple:
+    """Create output dir, queues, load and seed tasks for parse stage."""
+    task_pending_queue = thread_queue.Queue()
+    task_result_queue = thread_queue.Queue()
+
+    tasks = [{
+        'task': loaded['task'],
+        'input': loaded['action'],
+        'content': loaded['content'],
+        'action_result': loaded['action'],
+    } for loaded in load_action_result()]
+
+    for task in tasks:
+        task_pending_queue.put(task)
+    _LOGGER.info(f"Seeded {len(tasks)} tasks for parse stage")
+
+    return task_pending_queue, task_result_queue
+
+
+def prepare_parse_stage_function(plan_config, initial_factory: Callable) -> Callable:
+    """Create worker prepare function for parse stage."""
+    return functools.partial(
+        prepare_parse_resources,
+        initial_factory=initial_factory,
+        plan_config=plan_config
+    )
+
+
+# ── extract stage preparation ──
+
+def prepare_extract_stage_class() -> Tuple:
+    """Determine worker and barrier class for extract stage (always thread)."""
+    return Thread, ThreadBarrier
+
+
+def prepare_extract_stage_task_components(plan_config) -> Tuple:
+    """Create output dir, queues, load and seed tasks for extract stage."""
+    task_pending_queue = thread_queue.Queue()
+    task_result_queue = thread_queue.Queue()
+
+    tasks = [{
+        'task': loaded['task'],
+        'input': loaded['parse'],
+        'content': loaded['content'],
+        'action_result': loaded['action'],
+        'parse_result': loaded['parse'],
+    } for loaded in load_parse_result()]
+
+    for task in tasks:
+        task_pending_queue.put(task)
+    _LOGGER.info(f"Seeded {len(tasks)} tasks for extract stage")
+
+    return task_pending_queue, task_result_queue
+
+
+def prepare_extract_stage_function(plan_config, initial_factory: Callable) -> Callable:
+    """Create worker prepare function for extract stage."""
+    return functools.partial(
+        prepare_extract_resources,
+        initial_factory=initial_factory,
+        plan_config=plan_config
+    )

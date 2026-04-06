@@ -45,11 +45,11 @@ def cmd_init(target, skills_only, docs_only):
         src = pkg_dir / 'docs'
         dst = target / 'docs'
         if src.exists():
-            dst.mkdir(parents=True, exist_ok=True)
-            for f in src.iterdir():
-                if f.is_file():
-                    shutil.copy2(f, dst / f.name)
-                    copied.append(f'docs/{f.name}')
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+            file_count = sum(1 for _ in dst.rglob('*') if _.is_file())
+            copied.append(f'docs/ ({file_count} files)')
     
     if copied:
         click.echo(f"Initialized in: {target}")

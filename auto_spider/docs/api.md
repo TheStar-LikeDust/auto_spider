@@ -4,18 +4,19 @@
 
 ```bash
 # 生成项目模板
-python -m auto_spider generate <name>
-python -m auto_spider generate <name> --single-file
+auto-spider generate <name>              # 默认生成单文件 {name}.py
+auto-spider generate <name> --module     # 生成 {name}.py + steps_{name}/ 模块
 
-# 运行计划
-python -m auto_spider run <file> <step> -s <stage>
-python -m auto_spider run <file> <step> -w <num>
-python -m auto_spider run <file> <step> --retry-failed
+# 运行计划（.py 扩展名可选）
+auto-spider run <name> --action          # 支持 tp 或 tp.py
+auto-spider run <name> --parse
+auto-spider run <name> --extract
+auto-spider run <name> --action --retry-failed
 ```
 
-**stage 参数**：`action` / `parse` / `extract`
+**阶段参数**：`--action` / `--parse` / `--extract`（三选一）
 
-**自动检测**：不指定 `-s` 时，步骤名含 parse→parse，含 extract 或 save→extract，其他→action
+**步骤配置**：执行哪些 step 由 plan 文件中的 `ACTION_STEPS` / `PARSE_STEPS` / `EXTRACT_STEPS` 列表决定
 
 ## PlanConfig
 
@@ -23,12 +24,17 @@ python -m auto_spider run <file> <step> --retry-failed
 from auto_spider import PlanConfig
 
 PLAN_CONFIG = PlanConfig()
-PLAN_CONFIG.PLAN_NAME = 'myplan'           # 计划名称，用于输出目录
-PLAN_CONFIG.OUTPUT_DIR = 'output'          # 输出目录路径
+PLAN_CONFIG.PLAN_NAME = 'myplan'           # 计划名称，作为输出子目录
+PLAN_CONFIG.OUTPUT_DIR = 'output'          # 基础输出目录（最终: output/<PLAN_NAME>/action_xxx）
 PLAN_CONFIG.MAX_WORKERS = 4                # 并发Worker数量
 PLAN_CONFIG.RATE_LIMIT = 1.0               # 任务间隔秒数，None为无限制
-PLAN_CONFIG.STORAGE_TIMESTAMP = True       # 目录名是否带时间戳
+PLAN_CONFIG.STORAGE_TIMESTAMP = True       # True: action_20241118_150000, False: action（覆盖模式）
 PLAN_CONFIG.TASK_RETRY_COUNT = 3           # 任务重试次数（1次初始 + 2次重试）
+PLAN_CONFIG.START_DELAY = 0               # Worker启动前的倒计时秒数（0=无倒计时）
+
+ACTION_STEPS = ['fetch_page']              # action阶段执行的step列表
+PARSE_STEPS = ['parse_data']               # parse阶段执行的step列表
+EXTRACT_STEPS = ['save_data']              # extract阶段执行的step列表
 ```
 
 ## Context

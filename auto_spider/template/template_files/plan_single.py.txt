@@ -1,38 +1,35 @@
 """
 $description
 
-Plan script with 3 fixed functions and inline steps.
-
-Usage (via CLI):
-    # Run action stage
-    auto-spider run plan_$name.py fetch_page --stage action
-    
-    # Run parse stage
-    auto-spider run plan_$name.py parse_data --stage parse
-    
-    # Run extract stage
-    auto-spider run plan_$name.py save_data --stage extract
-    
-    # Retry failed tasks
-    auto-spider run plan_$name.py fetch_page --stage action --retry-failed
+Usage:
+    auto-spider run $name --action
+    auto-spider run $name --parse
+    auto-spider run $name --extract
+    auto-spider run $name --action -i key=value    # pass params to initial_task
+    auto-spider run $name --action -t key=value    # inject params into each task
 """
 
 from auto_spider import action, parse, extract, Context
 from auto_spider.tools.html_cleaner import clean_html
 from auto_spider.tools.html_to_markdown import html_to_markdown
+from auto_spider.tools.xpath import xpath_extract
 from auto_spider.core import Task, run_plan, PlanConfig
-from auto_spider.components import PlaywrightSpider
+from auto_spider.components import PlaywrightSpider, RequestSpider
 
 
 # ============== Configuration ==============
 
 PLAN_CONFIG = PlanConfig()
 PLAN_CONFIG.PLAN_NAME = '$name'
-PLAN_CONFIG.MAX_WORKERS = 4           # number of concurrent workers
-PLAN_CONFIG.RATE_LIMIT = None         # delay between tasks in seconds (None = no limit)
-PLAN_CONFIG.OUTPUT_DIR = 'output'     # single file uses local output
-PLAN_CONFIG.STORAGE_TIMESTAMP = True  # True: timestamped dirs, False: overwrite mode
-PLAN_CONFIG.TASK_RETRY_COUNT = 3      # retry count per task (1 initial + 2 retries)
+PLAN_CONFIG.MAX_WORKERS = 4
+PLAN_CONFIG.RATE_LIMIT = 5
+PLAN_CONFIG.OUTPUT_DIR = 'output'
+PLAN_CONFIG.STORAGE_TIMESTAMP = True
+PLAN_CONFIG.TASK_RETRY_COUNT = 3
+
+# ACTION_STEPS = ['fetch_page']
+# PARSE_STEPS = ['parse_data']
+# EXTRACT_STEPS = ['save_data']
 
 
 # ============== Plan Functions ==============
@@ -40,10 +37,12 @@ PLAN_CONFIG.TASK_RETRY_COUNT = 3      # retry count per task (1 initial + 2 retr
 def initial_spider():
     """Create and return spider instance."""
     return PlaywrightSpider(headless=True, enable_cdp=True)
+    # return RequestSpider()
 
 
-def initial_task():
+def initial_task(init_params: dict = None):
     """Create and return task list."""
+    init_params = init_params or {}
     return [
         Task(url='https://example.com/page1'),
         Task(url='https://example.com/page2'),
@@ -51,17 +50,10 @@ def initial_task():
 
 
 def initial_plan():
-    """
-    Initialize and return resources object.
-    
-    Resources will be injected into context.initial
-    """
-    # initialize db, cache, etc
-    initial = {
+    """Initialize and return resources object."""
+    return {
         # 'db': Database(),
-        # 'cache': Cache(),
     }
-    return initial
 
 
 # ============== Steps ==============
@@ -72,17 +64,10 @@ def fetch_page(context: Context):
     url = context.task.get('url')
     if not url:
         raise ValueError("Task must have 'url' field")
-    
-    # navigate to page
+
     content = context.spider.do_url(url)
-    
-    # convert to markdown (best for understanding content)
     markdown = html_to_markdown(content)
-    
-    # clean HTML (for XPath extraction)
     cleaned_html = clean_html(content).get('body', '')
-    
-    # get interactive elements via CDP
     page_info = context.spider.get_page_info()
 
     context['content'] = content
@@ -91,29 +76,16 @@ def fetch_page(context: Context):
         'cleaned_html': cleaned_html,
         'page_info': page_info,
     }
-    
-    # action stage saves:
-    # - task1_task.json (original task from context.task)
-    # - task1_action.json (page_info from context['result'])
-    # - task1.html (content from context['content'])
-    
     return content
 
 
 @parse()
 def parse_data(context: Context):
     """Parse HTML content to extract data."""
-    from auto_spider.tools.xpath import xpath_extract
-    
-    # read action result (context['input'] from task1_action.json)
     action_result = context.get('input', {})
-    # read HTML content
     content = context.get('content', '')
-    # access original task if needed
-    original_task = context.task
-    
+
     # TODO: implement parsing logic
-    # Example: extract title, links, etc.
     # titles = xpath_extract(content, '//h1/text()')
     # links = xpath_extract(content, '//a/@href')
     data = {
@@ -121,49 +93,23 @@ def parse_data(context: Context):
         'items': [],
         'source_url': action_result.get('page_info', {}).get('url', action_result.get('url', ''))
     }
-    
-    # save parsed data to context['result']
     context['result'] = data
-    
-    # parse stage saves:
-    # - task1_task.json (original task from context.task)
-    # - task1_action.json (action result from context['action_result'])
-    # - task1_parse.json (parse result from context['result'])
-    # - task1.html (content from context['content'])
-    
     return data
 
 
 @extract()
 def save_data(context: Context):
     """Save parsed data to database or file."""
-    # read parse result (from task1_parse.json)
     parse_result = context.get('input', {})
-    
-    # access original task if needed
-    original_task = context.task
-    
+
     # TODO: implement save logic
-    # Example: save to database, write to file, etc.
     # db = context.initial.get('db')
     # db.save(parse_result)
-    
-    # extract stage does NOT save files
-    # it only reads: task1_task.json, task1_action.json, task1_parse.json, task1.html
-    
+
     item_count = len(parse_result.get('items', []))
     return f"Saved {item_count} items"
 
 
-# ============== Debug Execution ==============
-# Uncomment below to run directly for debugging
-# Recommended: use CLI commands above for production
-
+# ============== Debug ==============
 # if __name__ == '__main__':
-#     run_plan(
-#         initial_spider, initial_task, initial_plan,
-#         plan_config=PLAN_CONFIG,
-#         actions=['fetch_page'],      # action: fetch HTML
-#         # parses=['parse_data'],     # parse: extract data from HTML
-#         # extracts=['save_data'],    # extract: save to database
-#     )
+#     run_plan(initial_spider, initial_task, initial_plan, PLAN_CONFIG, action=True)

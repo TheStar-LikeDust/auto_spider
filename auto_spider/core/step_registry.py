@@ -48,6 +48,17 @@ def active(priority: int = 500):
 # ----------
 # functions
 
+def _get_registry(stage: str) -> Dict[str, Callable]:
+    """Get registry dict for a stage."""
+    if stage == 'action':
+        return _ACTION_REGISTRY
+    elif stage == 'parse':
+        return _PARSE_REGISTRY
+    elif stage == 'extract':
+        return _EXTRACT_REGISTRY
+    raise ValueError(f"Unknown stage: {stage}")
+
+
 def register_step(stage: str, name: str, func: Callable, priority: int = 500):
     """
     Register step function to global registry.
@@ -62,15 +73,8 @@ def register_step(stage: str, name: str, func: Callable, priority: int = 500):
     if hasattr(func, '__module__'):
         _TRACKED_MODULES.add(func.__module__)
 
-    if stage == 'action':
-        func.priority = priority
-        _ACTION_REGISTRY[name] = func
-    elif stage == 'parse':
-        _PARSE_REGISTRY[name] = {'func': func, 'priority': priority}
-    elif stage == 'extract':
-        _EXTRACT_REGISTRY[name] = {'func': func, 'priority': priority}
-    else:
-        raise ValueError(f"Unknown stage: {stage}")
+    func.priority = priority
+    _get_registry(stage)[name] = func
 
 
 def step(stage: str = 'action', priority: int = 500):
@@ -109,22 +113,10 @@ def get_step(stage: str, name: str) -> Callable:
     Returns:
         Step function
     """
-    if stage == 'action':
-        if name not in _ACTION_REGISTRY:
-            raise KeyError(f"Action not found: {name}")
-        return _ACTION_REGISTRY[name]
-    elif stage == 'parse':
-        parse_info = _PARSE_REGISTRY.get(name)
-        if not parse_info:
-            raise ValueError(f"Parse function '{name}' not registered")
-        return parse_info['func']
-    elif stage == 'extract':
-        extract_info = _EXTRACT_REGISTRY.get(name)
-        if not extract_info:
-            raise ValueError(f"Extract function '{name}' not registered")
-        return extract_info['func']
-    else:
-        raise ValueError(f"Unknown stage: {stage}")
+    registry = _get_registry(stage)
+    if name not in registry:
+        raise KeyError(f"Step not found: {stage}/{name}")
+    return registry[name]
 
 
 def get_all_steps(stage: str) -> Dict[str, Callable]:
@@ -137,14 +129,51 @@ def get_all_steps(stage: str) -> Dict[str, Callable]:
     Returns:
         Dict mapping step names to functions
     """
-    if stage == 'action':
-        return _ACTION_REGISTRY.copy()
-    elif stage == 'parse':
-        return {name: info['func'] for name, info in _PARSE_REGISTRY.items()}
-    elif stage == 'extract':
-        return {name: info['func'] for name, info in _EXTRACT_REGISTRY.items()}
-    else:
-        raise ValueError(f"Unknown stage: {stage}")
+    return _get_registry(stage).copy()
+
+
+def get_stage_steps(stage: str, step_names: List[str] = None) -> List[Callable]:
+    """
+    Get step functions for a stage.
+    
+    If step_names is provided, return steps in that order.
+    Otherwise, return all registered steps sorted by priority (ascending).
+    
+    Args:
+        stage: Stage type ('action', 'parse', 'extract')
+        step_names: Optional list of step names to get in order
+        
+    Returns:
+        List of step functions
+    """
+    if step_names:
+        return [get_step(stage, name) for name in step_names]
+
+    registry = _get_registry(stage)
+    items = sorted(registry.values(), key=lambda f: getattr(f, 'priority', 500))
+    return items
+
+
+def get_stage_step_names(stage: str, step_names: List[str] = None) -> List[str]:
+    """
+    Get step function names for a stage.
+    
+    If step_names is provided, return as-is.
+    Otherwise, return all registered step names sorted by priority (ascending).
+    
+    Args:
+        stage: Stage type ('action', 'parse', 'extract')
+        step_names: Optional list of step names
+        
+    Returns:
+        List of step function names
+    """
+    if step_names:
+        return step_names
+
+    registry = _get_registry(stage)
+    items = sorted(registry.items(), key=lambda x: getattr(x[1], 'priority', 500))
+    return [name for name, _ in items]
 
 
 def get_all_actions() -> Dict[str, Callable]:

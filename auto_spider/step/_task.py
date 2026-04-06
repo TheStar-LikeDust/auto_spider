@@ -1,13 +1,11 @@
 """
-ActionInput class for action step input.
+Task class for step input.
 """
 
 
 class Task(dict):
     """
-    Task dict for action step input.
-
-    Hashable for deduplication.
+    Task dict for step input. Hashable for deduplication.
 
     Example:
         task = Task(url='https://baidu.com', retry=3)

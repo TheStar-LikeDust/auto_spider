@@ -1,83 +1,68 @@
 """
 Plan configuration management.
 
-Provides default configuration and config merge utilities.
+`PlanConfig` is composed from three user-facing config classes and one internal mixin:
 
-Configuration Fields
---------------------
-PLAN_NAME : str
-    Plan name for output directory naming
-    Used by: scheduler, storage
-    
-MAX_WORKERS : int
-    Number of concurrent workers (default: 4)
-    Used by: scheduler, dispatcher
-    
-RATE_LIMIT : float or None
-    Delay between tasks in seconds (None = no limit)
-    Example: 1.0 = 1 task/sec, 0.5 = 2 tasks/sec
-    Used by: scheduler, dispatcher
-    
-OUTPUT_DIR : str or None
-    Custom output directory (None = auto create based on PLAN_NAME)
-    Used by: scheduler, storage
+```
+PlanConfig(dict, DictAttributeMixin, CommonConfig, StorageConfig, ExecutionConfig, RuntimeConfigMixin)
+```
 
-STORAGE_BACKEND : str
-    Storage backend type ('file', 'shelve', 'sqlite', 'redis')
-    Default: 'file'
-    Used by: storage
-    
-STORAGE_OPTIONS : dict
-    Backend-specific options
-    Example: {'base_dir': 'output'} for file/shelve
-    Used by: storage
+## CommonConfig — plan identity
 
-Usage in Modules
-----------------
-scheduler.py:
-    - Reads: PLAN_NAME, MAX_WORKERS, RATE_LIMIT, OUTPUT_DIR
-    - Creates output directories using PLAN_NAME
-    - Controls worker count via MAX_WORKERS
-    - Applies rate limiting via RATE_LIMIT
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `PLAN_NAME` | `str | None` | `None` | Plan name, used for output directory naming |
 
-storage.py:
-    - Reads: PLAN_NAME, OUTPUT_DIR
-    - Creates stage directories based on PLAN_NAME
-    - Uses OUTPUT_DIR if specified
+## StorageConfig — storage behavior
 
-worker.py:
-    - Passes config to Context
-    - Does not directly read config values
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `OUTPUT_DIR` | `str | None` | `None` | Base output dir. Final path: `<OUTPUT_DIR>/<PLAN_NAME>/action_xxx` |
+| `STORAGE_BACKEND` | `str` | `'file'` | Backend type: `file | shelve | sqlite | redis` |
+| `STORAGE_OPTIONS` | `dict` | `{}` | Backend-specific options |
+| `STORAGE_TIMESTAMP` | `bool` | `True` | Append timestamp to dir name, e.g. `action_20241118_150000` |
+| `SAVE_RESULT` | `bool` | `True` | Write results to storage. `False` disables all file output |
 
-User Steps:
-    @action()
-    def my_step(context: Context):
-        # Access any config value
-        max_workers = context.config.MAX_WORKERS
-        plan_name = context.config.PLAN_NAME
+## ExecutionConfig — concurrency / rate limit / retry
 
-Recommended Usage
------------------
-# In plan file
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `MAX_WORKERS` | `int` | `4` | Number of concurrent workers |
+| `RATE_LIMIT` | `float | None` | `None` | Delay between tasks in seconds. `None` = no limit |
+| `TASK_RETRY_COUNT` | `int` | `3` | Total attempts per task (1 initial + N-1 retries) |
+| `USE_THREAD_WORKERS` | `bool` | `False` | Force Thread for all stages. Default: action=Process, parse/extract=Thread |
+| `START_DELAY` | `int` | `0` | Countdown seconds before workers start |
+
+## RuntimeConfigMixin — internal (set by system)
+
+| Field | Type | Description |
+|---|---|---|
+| `_action_steps` | `List[str]` | Populated from `ACTION_STEPS` in plan module |
+| `_parse_steps` | `List[str]` | Populated from `PARSE_STEPS` in plan module |
+| `_extract_steps` | `List[str]` | Populated from `EXTRACT_STEPS` in plan module |
+
+## Usage
+
+```python
 PLAN_CONFIG = PlanConfig()
 PLAN_CONFIG.PLAN_NAME = 'myplan'
 PLAN_CONFIG.MAX_WORKERS = 4
 PLAN_CONFIG.RATE_LIMIT = 1.0
-PLAN_CONFIG.OUTPUT_DIR = None
 
-# Pass to run_plan
-run_plan(..., config=PLAN_CONFIG)
+ACTION_STEPS = ['fetch_page']
+PARSE_STEPS = ['parse_data']
+EXTRACT_STEPS = ['save_data']
+```
 
-# Access in step
-@action()
-def fetch_page(context: Context):
-    workers = context.config.MAX_WORKERS
+```bash
+auto-spider run myplan.py --action
+```
 """
 
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Optional, Callable, List, Tuple, Dict, Any
+from typing import Optional, List, Dict, Any
 
 
 class DictAttributeMixin:
@@ -100,63 +85,85 @@ class DictAttributeMixin:
             dict.__setitem__(self, key, value)
 
 
+class CommonConfig:
+    """Common plan identity config."""
+
+    # Plan name for output directory naming
+    PLAN_NAME: Optional[str] = None
+
+
+class StorageConfig:
+    """Storage behavior config."""
+
+    # Base output directory (final: <OUTPUT_DIR>/<PLAN_NAME>/action_xxx)
+    OUTPUT_DIR: Optional[str] = None
+
+    # Storage backend type ('file', 'shelve', 'sqlite', 'redis')
+    STORAGE_BACKEND: str = 'file'
+
+    # Backend-specific options
+    STORAGE_OPTIONS: dict = None
+
+    # Use timestamp in storage directory name (True: action_20241118_150000, False: action)
+    STORAGE_TIMESTAMP: bool = True
+
+    # Save results to storage (False = disable all file output)
+    SAVE_RESULT: bool = True
+
+
+class ExecutionConfig:
+    """Worker execution config: concurrency, rate limit, retry strategy."""
+
+    # Number of concurrent workers
+    MAX_WORKERS: int = 4
+
+    # Delay between tasks in seconds (None = no limit)
+    RATE_LIMIT: Optional[float] = None
+
+    # Task retry count (default: 3 = 1 initial + 2 retries)
+    TASK_RETRY_COUNT: int = 3
+
+    # Force thread workers for all stages (default: False)
+    # If False: action uses Process, parse/extract use Thread
+    # If True: all stages use Thread
+    USE_THREAD_WORKERS: bool = False
+
+    # Countdown delay before workers start (seconds, 0 = no countdown)
+    START_DELAY: int = 0
+
+
 class RuntimeConfigMixin:
     """
-    Mixin for runtime internal variables.
-    
-    These variables are set by scheduler/worker during execution,
-    not by user. All prefixed with underscore.
+    Internal runtime variables set by the system during execution.
+    Not user-facing. All prefixed with underscore.
     """
-    
-    # Current stage output directory (set by scheduler, used by worker)
-    _stage_output_dir: Optional[str] = None
+
+    # Step name lists (set by load_plan_module, used by run_plan)
+    _action_steps: List[str] = []
+    _parse_steps: List[str] = []
+    _extract_steps: List[str] = []
 
 
-class PlanConfig(dict, DictAttributeMixin, RuntimeConfigMixin):
+class PlanConfig(dict, DictAttributeMixin, CommonConfig, StorageConfig, ExecutionConfig, RuntimeConfigMixin):
     """
     Plan execution configuration.
-    
-    Config Fields (all uppercase for clarity):
-        PLAN_NAME: str - Plan name for output directory
-        MAX_WORKERS: int - Number of concurrent workers
-        RATE_LIMIT: float - Delay between tasks in seconds
-        OUTPUT_DIR: str - Custom output directory
-    
+
+    Composed from:
+        CommonConfig    - PLAN_NAME
+        StorageConfig   - OUTPUT_DIR, STORAGE_BACKEND, STORAGE_OPTIONS, STORAGE_TIMESTAMP, SAVE_RESULT
+        ExecutionConfig - MAX_WORKERS, RATE_LIMIT, TASK_RETRY_COUNT, USE_THREAD_WORKERS, START_DELAY
+
     Access methods:
         config.PLAN_NAME          # attribute access (with IDE hints)
         config['PLAN_NAME']       # dict access (flexible)
-    
+
     Example:
         PLAN_CONFIG = PlanConfig()
         PLAN_CONFIG.PLAN_NAME = 'myplan'
         PLAN_CONFIG.MAX_WORKERS = 4
         PLAN_CONFIG.RATE_LIMIT = 1.0
     """
-    
-    # Plan name for output directory
-    PLAN_NAME: Optional[str] = None
-    
-    # Number of concurrent workers
-    MAX_WORKERS: int = 4
-    
-    # Delay between tasks (seconds)
-    RATE_LIMIT: Optional[float] = None
-    
-    # Custom output directory
-    OUTPUT_DIR: Optional[str] = None
-    
-    # Storage backend type
-    STORAGE_BACKEND: str = 'file'
-    
-    # Storage backend options
-    STORAGE_OPTIONS: dict = None
-    
-    # Use timestamp in storage directory name (True: action_20241118_150000, False: action)
-    STORAGE_TIMESTAMP: bool = True
-    
-    # Task retry count (default: 3 = 1 initial + 2 retries)
-    TASK_RETRY_COUNT: int = 3
-    
+
     def __init__(self):
         super().__init__()
         if self.STORAGE_OPTIONS is None:
@@ -172,18 +179,17 @@ def load_plan_module(plan_file: str) -> Dict[str, Any]:
     Load plan module and extract all configuration parameters.
     
     Args:
-        plan_file: Path to plan file
+        plan_file: Path to plan file (with or without .py extension)
         
     Returns:
         Dict with keys:
             - initial_spider: Spider factory function
             - initial_task: Task factory function
             - initial_plan: Plan factory function
-            - actions: List of action step names
-            - parses: List of parse step names
-            - extracts: List of extract step names
-            - config: PlanConfig instance
+            - plan_config: PlanConfig instance (with _action_steps/_parse_steps/_extract_steps attached)
     """
+    if not plan_file.endswith('.py'):
+        plan_file = f"{plan_file}.py"
     plan_path = Path(plan_file).resolve()
     if not plan_path.exists():
         raise FileNotFoundError(f"Plan file not found: {plan_file}")
@@ -209,23 +215,15 @@ def load_plan_module(plan_file: str) -> Dict[str, Any]:
     # extract plan_config
     plan_config = getattr(module, 'PLAN_CONFIG', None)
     
-    # extract step names
-    stages_dict = getattr(module, 'STAGES', None)
-    if stages_dict:
-        actions = stages_dict.get('action', [])
-        parses = stages_dict.get('parse', [])
-        extracts = stages_dict.get('extract', [])
-    else:
-        actions = getattr(module, 'ACTION_LIST', [])
-        parses = getattr(module, 'PARSE_LIST', [])
-        extracts = getattr(module, 'EXTRACT_LIST', [])
+    # attach step names to plan_config for run_plan to read
+    if plan_config:
+        plan_config._action_steps = getattr(module, 'ACTION_STEPS', [])
+        plan_config._parse_steps = getattr(module, 'PARSE_STEPS', [])
+        plan_config._extract_steps = getattr(module, 'EXTRACT_STEPS', [])
     
     return {
         'initial_spider': initial_spider,
         'initial_task': initial_task,
         'initial_plan': initial_plan,
-        'actions': actions,
-        'parses': parses,
-        'extracts': extracts,
         'plan_config': plan_config
     }

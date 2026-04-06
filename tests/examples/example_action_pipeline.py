@@ -10,8 +10,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from auto_spider import Context, action, parse
-from auto_spider.core import Task, run_plan
+from auto_spider.core import Task, run_plan, PlanConfig
 from auto_spider.components import RequestSpider
+
+PLAN_CONFIG = PlanConfig()
+PLAN_CONFIG.PLAN_NAME = 'example_pipeline'
+PLAN_CONFIG.MAX_WORKERS = 2
+PLAN_CONFIG._action_steps = ['fetch_page']
+PLAN_CONFIG._parse_steps = ['parse_html']
+PLAN_CONFIG._extract_steps = []
 
 
 def initial_spider():
@@ -21,7 +28,6 @@ def initial_spider():
 
 def initial_task():
     """Create and return task list."""
-    # Define tasks directly
     urls = [
         'https://example.com',
         'https://example.org',
@@ -31,11 +37,7 @@ def initial_task():
 
 
 def initial_plan():
-    """
-    Initialize and return resources object.
-    
-    Context will auto have: output_dir, save_result
-    """
+    """Initialize and return resources object."""
     return {}
 
 
@@ -51,7 +53,7 @@ def fetch_page(context: Context):
 @parse()
 def parse_html(context: Context):
     """Parse HTML and extract info."""
-    html = context['result']  # 自动从action阶段加载
+    html = context['result']
     
     start = html.find('<title>')
     end = html.find('</title>')
@@ -67,13 +69,13 @@ def parse_html(context: Context):
 def action_pipeline_main():
     # Step 1: Action stage (download)
     print("=== Action Stage: Download ===")
-    run_plan(initial_spider, initial_task, initial_plan, 
-             actions=['fetch_page'], plan_name='example_pipeline', max_workers=2)
+    run_plan(initial_spider, initial_task, initial_plan,
+             plan_config=PLAN_CONFIG, action=True)
     
     # Step 2: Parse stage (parse HTML)
     print("\n=== Parse Stage: Parse HTML ===")
-    run_plan(initial_task=initial_task, initial_plan=initial_plan,
-             parses=['parse_html'], plan_name='example_pipeline', max_workers=2)
+    run_plan(initial_spider, initial_task, initial_plan,
+             plan_config=PLAN_CONFIG, parse=True)
     
     print("\nPipeline completed! Check output/example_pipeline_*/ for results")
 

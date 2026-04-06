@@ -180,11 +180,14 @@ class PlaywrightSpider(Spider):
         launch_args = {}
         browser_args = []
 
-        if self.enable_cdp and self.browser_type == 'chromium':
-            if self.debug_port:
-                browser_args.extend([f'--remote-debugging-port={self.debug_port}'])
-            else:
-                browser_args.extend(['--remote-debugging-port=0'])  # Auto-assign port
+        if self.browser_type == 'chromium':
+            browser_args.append('--disable-blink-features=AutomationControlled')
+
+            if self.enable_cdp:
+                if self.debug_port:
+                    browser_args.append(f'--remote-debugging-port={self.debug_port}')
+                else:
+                    browser_args.append('--remote-debugging-port=0')  # Auto-assign port
 
             launch_args['args'] = browser_args
 
@@ -194,6 +197,14 @@ class PlaywrightSpider(Spider):
         self.browser = browser_launcher.launch(headless=self.headless, **launch_args)
 
         self.page = self.browser.new_page(viewport=self.viewport)
+        self.page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+        try:
+            from playwright_stealth import stealth_sync
+            stealth_sync(self.page)
+        except ImportError:
+            pass
+
         self.page.set_default_timeout(self.timeout)
 
         if self.enable_cdp:

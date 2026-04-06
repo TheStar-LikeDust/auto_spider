@@ -12,9 +12,9 @@ description: Write extract steps to persist data. Use when saving to database, C
 
 ## File Location
 
-After `python -m auto_spider generate myplan`:
-- Multi-file: `steps_myplan/extract.py`
-- Single-file: `plan_myplan.py` (inline `@extract()` function)
+After `auto-spider generate myplan`:
+- Single-file (default): `myplan.py` (inline `@extract()` function)
+- Multi-file (`--module`): `steps_myplan/extract.py`
 
 ## Core Patterns
 
@@ -70,4 +70,4 @@ def save_to_csv(context: Context):
 ## Related Skills
 - `exec-run-verify` - 运行和验证
 - `write-parse` - 编写 parse
-- `log-task` - 记录任务
+- `analyze-script` - 复杂分析用独立脚本
