@@ -7,7 +7,7 @@ Workflow:
 3. Execute: core.run_plan() with stage parameter ('action', 'parse', 'extract')
 """
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 # for developing steps
 from .step import Context, Task
