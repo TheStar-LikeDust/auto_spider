@@ -6,12 +6,12 @@
 
 ```bash
 # 1. 生成项目模板
-python -m auto_spider generate myplan
+auto-spider generate myplan
 
-# 2. 配置 plan_myplan.py
+# 2. 配置 myplan.py
 
-# 3. 运行
-python plan_myplan.py
+# 3. 运行（支持省略 .py 扩展名）
+auto-spider run myplan --action
 ```
 
 ## 核心概念
@@ -54,8 +54,13 @@ from auto_spider.components import PlaywrightSpider
 
 PLAN_CONFIG = PlanConfig()
 PLAN_CONFIG.PLAN_NAME = 'myplan'
+PLAN_CONFIG.OUTPUT_DIR = 'output'     # 最终: output/myplan/action_xxx
 PLAN_CONFIG.MAX_WORKERS = 4
 PLAN_CONFIG.RATE_LIMIT = 1.0
+
+ACTION_STEPS = ['fetch_page']
+PARSE_STEPS = ['parse_data']
+EXTRACT_STEPS = ['save_data']
 
 def initial_spider():
     return PlaywrightSpider(headless=True)
@@ -102,13 +107,12 @@ def save_data(context: Context):
 ### 3. 运行
 
 ```bash
-# 推荐：使用 CLI 命令
-auto-spider run plan_myplan.py fetch_page --stage action
-auto-spider run plan_myplan.py parse_data --stage parse
-auto-spider run plan_myplan.py save_data --stage extract
+auto-spider run myplan --action
+auto-spider run myplan --parse
+auto-spider run myplan --extract
 
-# 重试失败任务
-auto-spider run plan_myplan.py fetch_page --stage action --retry-failed
+# 重试失败任务（.py 扩展名可选）
+auto-spider run myplan.py --action --retry-failed
 ```
 
 ## 执行逻辑
@@ -120,12 +124,12 @@ initial_task() 获取任务
     ↓
 Action阶段（多进程）
   → context['content'] = HTML
-  → 保存到 output/action_*/
+  → 保存到 <OUTPUT_DIR>/<PLAN_NAME>/action_*/
     ↓ 自动加载
 Parse阶段（多线程）
   → context['content'] = HTML（自动加载）
   → context['input'] = action结果（自动加载）
-  → 保存到 output/parse_*/
+  → 保存到 <OUTPUT_DIR>/<PLAN_NAME>/parse_*/
     ↓ 自动加载
 Extract阶段（多线程）
   → context['input'] = parse结果（自动加载）
@@ -142,18 +146,37 @@ Extract阶段（多线程）
 
 ### 文件结构
 
+单文件模式（`OUTPUT_DIR = 'output'`, `PLAN_NAME = 'myplan'`）：
 ```
 output/
-├── action_20241118_100000/
-│   ├── task1.html
-│   ├── task1_task.json
-│   └── task1_action.json
-└── parse_20241118_100100/
-    ├── task1.html
-    ├── task1_task.json
-    ├── task1_action.json
-    └── task1_parse.json
+└── myplan/
+    ├── action_20241118_100000/
+    │   ├── task1.html
+    │   ├── task1_task.json
+    │   └── task1_action.json
+    └── parse_20241118_100100/
+        ├── task1.html
+        ├── task1_task.json
+        ├── task1_action.json
+        └── task1_parse.json
 ```
+
+包模式（`OUTPUT_DIR = 'steps_myplan/output'`, `PLAN_NAME = 'myplan'`）：
+```
+steps_myplan/
+├── __init__.py
+├── action.py
+├── parse.py
+├── extract.py
+└── output/
+    └── myplan/
+        ├── action_20241118_100000/
+        │   └── ...
+        └── parse_20241118_100100/
+            └── ...
+```
+
+`STORAGE_TIMESTAMP = False` 时，目录名不带时间戳（`action/` 代替 `action_20241118_100000/`），每次执行会清除旧结果。
 
 ## 常见场景
 

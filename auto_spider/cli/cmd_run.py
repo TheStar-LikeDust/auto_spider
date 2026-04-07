@@ -4,55 +4,47 @@ CLI command: run
 Run plan file with specified stage.
 """
 
+import json
+
 import click
 
-from ..core.plan_scheduler import run_plan, DEFAULT_MAX_WORKERS
+from ..core.plan_core import run_plan_with_file
 
 
 @click.command('run')
 @click.argument('plan_file')
-@click.argument('steps')
-@click.option('-s', '--stage', type=click.Choice(['action', 'parse', 'extract']), 
-              help='Execution stage (auto-detect if not specified)')
-@click.option('-w', '--workers', type=int, default=DEFAULT_MAX_WORKERS,
-              help=f'Number of workers (default: {DEFAULT_MAX_WORKERS})')
+@click.option('--action', is_flag=True, help='Run action stage')
+@click.option('--parse', is_flag=True, help='Run parse stage')
+@click.option('--extract', is_flag=True, help='Run extract stage')
 @click.option('--retry-failed', is_flag=True,
               help='Retry failed tasks from previous run')
-def cmd_run(plan_file, steps, stage, workers, retry_failed):
+@click.option('--task', '-t', 'params', multiple=True,
+              metavar='KEY=VALUE', help='Inject param into each task (repeatable)')
+@click.option('--init', '-i', 'init_params', multiple=True,
+              metavar='KEY=VALUE', help='Inject param into initial_task (repeatable)')
+@click.option('--tasks', default=None,
+              metavar='JSON', help='JSON string of task list, bypasses initial_task')
+def cmd_run(plan_file, action, parse, extract, retry_failed, params, init_params, tasks):
     """Run plan file with specified stage.
     
-    PLAN_FILE: Path to plan Python file
-    STEPS: Comma-separated step names (e.g., fetch_page,parse_data)
+    PLAN_FILE: Path to plan file, .py extension is optional (tp or tp.py both work)
+
+    Steps are defined in ACTION_STEPS/PARSE_STEPS/EXTRACT_STEPS lists in the plan file.
     """
+    if not (action or parse or extract):
+        raise click.UsageError("Must specify at least one of: --action, --parse, --extract")
+    
+    stages = [s for s, v in [('action', action), ('parse', parse), ('extract', extract)] if v]
     click.echo(f"Running plan: {plan_file}")
-    click.echo(f"   Workers: {workers}")
-    
-    # parse step names
-    step_list = [s.strip() for s in steps.split(',')]
-    click.echo(f"   Steps: {', '.join(step_list)}")
-    
-    # auto-detect stage if not specified
-    if not stage:
-        if any('parse' in s for s in step_list):
-            stage = 'parse'
-        elif any('extract' in s or 'save' in s for s in step_list):
-            stage = 'extract'
-        else:
-            stage = 'action'
-    
-    click.echo(f"   Stage: {stage}")
+    click.echo(f"   Stage: {', '.join(stages)}")
     if retry_failed:
         click.echo(f"   Mode: Retry failed tasks")
     
-    # build stage parameters
-    stage_params = {}
-    if stage == 'action':
-        stage_params['actions'] = step_list
-    elif stage == 'parse':
-        stage_params['parses'] = step_list
-    else:
-        stage_params['extracts'] = step_list
-    
-    run_plan(plan_file=plan_file, max_workers=workers, retry_failed=retry_failed, **stage_params)
+    task_params = dict(p.split('=', 1) for p in params) if params else None
+    init_params = dict(p.split('=', 1) for p in init_params) if init_params else None
+    tasks = json.loads(tasks) if tasks else None
+    run_plan_with_file(plan_file, action=action, parse=parse, extract=extract,
+                       retry_failed=retry_failed, task_params=task_params, init_params=init_params,
+                       tasks=tasks)
     
     click.echo(f"\nPlan execution completed")

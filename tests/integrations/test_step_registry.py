@@ -1,5 +1,5 @@
 """
-Integration test for registry module.
+Integration test for step_registry module.
 
 Test core registration and hot reload.
 """
@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from auto_spider.core.registry import action, parse, extract, get_step
+from auto_spider.core.step_registry import action, parse, extract, get_step
 from auto_spider.step import Context
 
 

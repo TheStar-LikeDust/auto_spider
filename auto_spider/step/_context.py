@@ -75,7 +75,7 @@ class Context(dict):
         self._step_results = {}
         self._step_history = []
 
-        self.tasks = []
+        self.append_tasks = []
 
     def save_step_result(self, step_name: str, result: Any):
         """

@@ -12,9 +12,9 @@ description: Write parse steps to extract structured data. Use when parsing HTML
 
 ## File Location
 
-After `python -m auto_spider generate myplan`:
-- Multi-file: `steps_myplan/parse.py`
-- Single-file: `plan_myplan.py` (inline `@parse()` function)
+After `auto-spider generate myplan`:
+- Single-file (default): `myplan.py` (inline `@parse()` function)
+- Multi-file (`--module`): `steps_myplan/parse.py`
 
 ## Core Patterns
 
@@ -64,4 +64,4 @@ def parse_clean(context: Context):
 - `exec-run-verify` - 运行和验证
 - `write-extract` - 编写 extract
 - `sense-clean-html` - 分析 HTML 结构
-- `log-task` - 记录任务
+- `analyze-script` - 复杂分析用独立脚本

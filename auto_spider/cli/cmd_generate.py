@@ -12,18 +12,19 @@ from ..template import generate_plan
 @click.command('generate')
 @click.argument('name')
 @click.option('-d', '--description', default=None, help='Plan description')
-@click.option('--single-file', is_flag=True, help='Generate single file with inline steps')
-def cmd_generate(name, description, single_file):
+@click.option('--module', is_flag=True, help='Generate with separate steps package')
+@click.option('--single-file', is_flag=True, hidden=True, help='Alias for default single file mode')
+def cmd_generate(name, description, module, single_file):
     """Generate plan template.
     
-    Creates plan_{NAME}.py and optionally steps_{NAME}/ package.
+    Creates {NAME}.py (default) or {NAME}.py + steps_{NAME}/ (--module).
     """
-    output_path = generate_plan(name, description, single_file)
+    use_single_file = not module
+    output_path = generate_plan(name, description, use_single_file)
     
     click.echo(f"Generated: {output_path}")
-    if not single_file:
+    if module:
         click.echo(f"Generated: steps_{name}/")
     
     click.echo(f"\nCommands:")
-    click.echo(f"  python plan_{name}.py")
-    click.echo(f"  auto-spider run plan_{name}.py fetch_page --stage action")
+    click.echo(f"  auto-spider run {name}.py --action")

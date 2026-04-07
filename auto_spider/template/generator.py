@@ -79,29 +79,29 @@ def generate_steps(name: str, description: str = None) -> Path:
     return package_path
 
 
-def generate_plan(name: str, description: str = None, single_file: bool = False) -> Path:
+def generate_plan(name: str, description: str = None, single_file: bool = True) -> Path:
     """
-    Generate plan_xxx.py template file in current directory.
+    Generate {name}.py template file in current directory.
     
     Args:
-        name: Plan name (will generate plan_{name}.py)
+        name: Plan name (will generate {name}.py)
         description: Plan description
-        single_file: Include steps inline in plan file (default: False)
+        single_file: Include steps inline in plan file (default: True)
         
     Returns:
         Path to generated file
         
     Example:
-        # with steps package
+        # single file with inline steps (default)
         generate_plan('baidu', description='Fetch baidu homepage')
         
-        # single file with inline steps
-        generate_plan('baidu', description='Fetch baidu homepage', single_file=True)
+        # with separate steps package
+        generate_plan('baidu', description='Fetch baidu homepage', single_file=False)
     """
     if not description:
         description = f'Plan for {name}'
     
-    filename = f'plan_{name}.py'
+    filename = f'{name}.py'
     output_path = Path(filename)
     
     # choose template based on mode

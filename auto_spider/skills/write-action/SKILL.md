@@ -24,9 +24,9 @@ description: Write action steps to download HTML. Use when implementing fetch, l
 
 ## File Location
 
-After `python -m auto_spider generate myplan`:
-- Multi-file: `steps_myplan/action.py`
-- Single-file: `plan_myplan.py` (inline `@action()` function)
+After `auto-spider generate myplan`:
+- Single-file (default): `myplan.py` (inline `@action()` function)
+- Multi-file (`--module`): `steps_myplan/action.py`
 
 ## Progressive Approach
 
@@ -189,7 +189,7 @@ def fetch_list_and_enqueue(context: Context):
 - `context['result']` -> `taskX_action.json`
 
 ## Related Skills
-- `sense` - 感知页面数据
-- `strategy` - 制定采集策略
+- `sense-scout` - 侦察页面
+- `sense-clean-html` - 分析 HTML 结构
 - `exec-run-verify` - 运行和验证
 - `write-parse` - 编写 parse

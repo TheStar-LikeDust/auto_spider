@@ -10,3 +10,4 @@ trafilatura>=1.6.0
 
 # Optional dependencies for environment configuration
 python-dotenv>=1.0.0
+playwright-stealth>=1.0.0
