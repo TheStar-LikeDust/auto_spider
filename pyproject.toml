@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auto-spider"
-version = "0.1.0"
+version = "0.2.0"
 description = "简单高效的三阶段网页爬虫框架"
 readme = "README.md"
 license = {file = "LICENSE"}
